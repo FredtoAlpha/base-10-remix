@@ -586,9 +586,9 @@
   function renderStepContent() {
     switch (state.currentStep) {
       case 1: return renderStep1_ChooseType();
-      case 2: return renderStep2_SelectClasses();
-      case 3: return renderStep3_Configure();
-      case 4: return renderStep4_Preview();
+      case 2: return renderStep2_DistributionMode();
+      case 3: return renderStep3_SelectClasses();
+      case 4: return renderStep4_GenerationAndSwaps();
       case 5: return renderStep5_Groups();
       default: return '<p class="text-center text-slate-500">Étape inconnue</p>';
     }
@@ -600,60 +600,147 @@
 
   function renderStep1_ChooseType() {
     return `
-      <div class="max-w-5xl mx-auto">
-        <div class="text-center mb-10">
-          <h3 class="text-3xl font-bold text-slate-900 mb-3">Quel type de groupes souhaitez-vous créer ?</h3>
-          <p class="text-lg text-slate-600">Choisissez le mode de répartition adapté à vos besoins pédagogiques</p>
+      <div class="max-w-7xl mx-auto">
+        <div class="text-center mb-8">
+          <h3 class="text-2xl font-bold text-slate-900 mb-2">🎯 Étape 1/4 - Scénario pédagogique</h3>
+          <p class="text-slate-600">Choisissez le type de groupes à créer</p>
         </div>
 
-        <div class="grid md:grid-cols-3 gap-6">
+        <div class="grid md:grid-cols-3 gap-6 mb-8">
           ${Object.values(GROUP_TYPES).map(type => `
-            <button
-              type="button"
-              class="group-type-card ${state.groupType === type.id ? 'selected' : ''} ${type.disabled ? 'disabled' : ''}"
-              data-type="${type.id}"
-              ${type.disabled ? 'disabled' : ''}
-            >
-              <div class="icon-wrapper">
-                <div class="icon">${type.icon}</div>
+            <div class="scenario-card ${state.groupType === type.id ? 'selected' : ''} ${type.disabled ? 'disabled' : ''}" data-type="${type.id}">
+              <div class="card-header">
+                <div class="icon-section">
+                  <div class="icon">${type.icon}</div>
+                  <div class="title-section">
+                    <h4 class="title">${type.title}</h4>
+                    <p class="subtitle">${type.description}</p>
+                  </div>
+                </div>
+                ${state.groupType === type.id ? '<div class="selected-badge"><i class="fas fa-check"></i></div>' : ''}
               </div>
-              <h4 class="title">${type.title}</h4>
-              <p class="description">${type.description}</p>
-              ${type.disabled ? '<span class="badge-disabled">Bientôt disponible</span>' : ''}
-              ${state.groupType === type.id ? '<i class="fas fa-check-circle check-icon"></i>' : ''}
-            </button>
+              
+              <div class="scenario-info">
+                <div class="info-item">
+                  <i class="fas fa-users"></i>
+                  <span>Basé sur les scores académiques et comportementaux</span>
+                </div>
+                <div class="info-item">
+                  <i class="fas fa-balance-scale"></i>
+                  <span>Équilibre automatique selon le scénario</span>
+                </div>
+              </div>
+              
+              ${type.disabled ? '<div class="disabled-overlay"><span class="disabled-text">Bientôt disponible</span></div>' : ''}
+            </div>
           `).join('')}
         </div>
 
-        <div class="grid md:grid-cols-2 gap-6 mt-10">
-          <div class="info-card ${GROUP_TYPES.needs.bgColor} ${GROUP_TYPES.needs.borderColor}">
-            <div class="flex items-start gap-4">
-              <div class="text-4xl">${GROUP_TYPES.needs.icon}</div>
-              <div>
-                <h5 class="font-semibold text-slate-900 mb-2">Groupes de Besoins</h5>
-                <ul class="text-sm text-slate-700 space-y-1">
-                  <li><i class="fas fa-check text-blue-600 mr-2"></i>Scores Math/Français</li>
-                  <li><i class="fas fa-check text-blue-600 mr-2"></i>Critères COM, TRA, PART, ABS</li>
-                  <li><i class="fas fa-check text-blue-600 mr-2"></i>Groupes hétérogènes</li>
-                  <li><i class="fas fa-check text-blue-600 mr-2"></i>Parité F/M équilibrée</li>
-                </ul>
+        <div class="action-section">
+          <div class="action-info">
+            <div class="info-badge ${state.groupType ? 'success' : 'warning'}">
+              ${state.groupType ? 
+                `<i class="fas fa-check-circle mr-2"></i>Scénario sélectionné : ${GROUP_TYPES[state.groupType].title}` : 
+                `<i class="fas fa-info-circle mr-2"></i>Choisissez un scénario pour continuer`
+              }
+            </div>
+          </div>
+          <button type="button" class="primary-action-btn ${!state.groupType ? 'disabled' : ''}" data-action="primary" ${!state.groupType ? 'disabled' : ''}>
+            <i class="fas fa-arrow-right mr-2"></i>
+            Continuer vers le mode de répartition
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  NOUVELLE ÉTAPE 2 : Mode de répartition (CORRECT)
+  // ─────────────────────────────────────────────────────────────
+
+  function renderStep2_DistributionMode() {
+    const groupTypeInfo = GROUP_TYPES[state.groupType];
+    
+    return `
+      <div class="max-w-7xl mx-auto">
+        <div class="text-center mb-8">
+          <h3 class="text-2xl font-bold text-slate-900 mb-2">🔄 Étape 2/4 - Mode de répartition</h3>
+          <p class="text-slate-600">Pour ${groupTypeInfo.title.toLowerCase()}, choisissez la stratégie de distribution</p>
+        </div>
+
+        <!-- Carte de résumé du scénario -->
+        <div class="scenario-summary mb-8 p-6 bg-gradient-to-r ${groupTypeInfo.color} text-white rounded-xl">
+          <div class="flex items-center gap-4">
+            <div class="text-4xl">${groupTypeInfo.icon}</div>
+            <div>
+              <h4 class="text-xl font-bold">${groupTypeInfo.title}</h4>
+              <p class="text-white/80">${groupTypeInfo.description}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Options de distribution -->
+        <div class="grid md:grid-cols-2 gap-6 mb-8">
+          <div class="distribution-card ${state.distributionType === 'heterogeneous' ? 'selected' : ''}" data-distribution="heterogeneous">
+            <div class="card-header">
+              <div class="icon-section">
+                <div class="icon">🎲</div>
+                <div class="title-section">
+                  <h4 class="title">Hétérogène</h4>
+                  <p class="subtitle">Équilibre des niveaux dans chaque groupe</p>
+                </div>
+              </div>
+              ${state.distributionType === 'heterogeneous' ? '<div class="selected-badge"><i class="fas fa-check"></i></div>' : ''}
+            </div>
+            
+            <div class="distribution-details">
+              <div class="detail-item">
+                <i class="fas fa-chart-line"></i>
+                <span>Distribution serpentine pour équilibrer les scores</span>
+              </div>
+              <div class="recommendation-badge"><i class="fas fa-star mr-1"></i>Recommandé pour ce scénario</div>
+            </div>
+          </div>
+          
+          <div class="distribution-card ${state.distributionType === 'homogeneous' ? 'selected' : ''}" data-distribution="homogeneous">
+            <div class="card-header">
+              <div class="icon-section">
+                <div class="icon">📊</div>
+                <div class="title-section">
+                  <h4 class="title">Homogène</h4>
+                  <p class="subtitle">Regroupe par niveaux similaires</p>
+                </div>
+              </div>
+              ${state.distributionType === 'homogeneous' ? '<div class="selected-badge"><i class="fas fa-check"></i></div>' : ''}
+            </div>
+            
+            <div class="distribution-details">
+              <div class="detail-item">
+                <i class="fas fa-chart-line"></i>
+                <span>Regroupement par quantiles d'indices</span>
               </div>
             </div>
           </div>
+        </div>
 
-          <div class="info-card ${GROUP_TYPES.language.bgColor} ${GROUP_TYPES.language.borderColor}">
-            <div class="flex items-start gap-4">
-              <div class="text-4xl">${GROUP_TYPES.language.icon}</div>
-              <div>
-                <h5 class="font-semibold text-slate-900 mb-2">Groupes LV2</h5>
-                <ul class="text-sm text-slate-700 space-y-1">
-                  <li><i class="fas fa-check text-purple-600 mr-2"></i>ESP / ITA / autres langues</li>
-                  <li><i class="fas fa-check text-purple-600 mr-2"></i>Priorité à PART (participation)</li>
-                  <li><i class="fas fa-check text-purple-600 mr-2"></i>Critères COM, TRA, ABS</li>
-                  <li><i class="fas fa-check text-purple-600 mr-2"></i>Parité F/M équilibrée</li>
-                </ul>
-              </div>
+        <div class="action-section">
+          <div class="action-info">
+            <div class="info-badge ${state.distributionType ? 'success' : 'warning'}">
+              ${state.distributionType ? 
+                `<i class="fas fa-check-circle mr-2"></i>Mode sélectionné : ${state.distributionType === 'heterogeneous' ? 'Hétérogène' : 'Homogène'}` : 
+                `<i class="fas fa-info-circle mr-2"></i>Choisissez un mode de répartition pour continuer`
+              }
             </div>
+          </div>
+          <div class="action-buttons">
+            <button type="button" class="secondary-action-btn" data-action="back">
+              <i class="fas fa-arrow-left mr-2"></i>
+              Retour au scénario
+            </button>
+            <button type="button" class="primary-action-btn ${!state.distributionType ? 'disabled' : ''}" data-action="primary" ${!state.distributionType ? 'disabled' : ''}>
+              <i class="fas fa-arrow-right mr-2"></i>
+              Continuer vers les associations
+            </button>
           </div>
         </div>
       </div>
@@ -661,10 +748,10 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  ÉTAPE 2 : Sélection des classes
+  //  ANCIENNE ÉTAPE 2 : Sélection des classes (devient Étape 3)
   // ─────────────────────────────────────────────────────────────
 
-  function renderStep2_SelectClasses() {
+  function renderStep3_SelectClasses() {
     if (state.isLoading) {
       return `
         <div class="flex flex-col items-center justify-center py-20">
@@ -1363,19 +1450,51 @@
   // ─────────────────────────────────────────────────────────────
 
   function renderStep4_Preview() {
+    // NOUVEAU FLUX: Étape 4 = GÉNÉRATION + SWAP SOUS CONTRAINTES
+    return renderStep4_GenerationAndSwaps();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  //  NOUVELLE ÉTAPE 4 : Génération et Swap sous contraintes
+  // ─────────────────────────────────────────────────────────────
+
+  function renderStep4_GenerationAndSwaps() {
     const config = getConfigSummary();
     const stats = calculateStep4Stats();
     const warnings = getStep4Warnings(stats);
     const recommendation = getAlgoRecommendation(stats);
 
     return `
-      <div class="max-w-4xl mx-auto">
+      <div class="max-w-7xl mx-auto">
         <div class="text-center mb-8">
-          <h3 class="text-2xl font-bold text-slate-900 mb-3">Vérification avant génération</h3>
-          <p class="text-slate-600">Vérifiez la configuration et les statistiques pré-génération</p>
+          <h3 class="text-2xl font-bold text-slate-900 mb-2">🚀 Étape 4/4 - Génération et ajustements</h3>
+          <p class="text-slate-600">Génération scientifique et swaps sous contraintes avec statistiques temps réel</p>
         </div>
 
-        <!-- STATISTIQUES GLOBALES -->
+        <!-- Configuration résumée -->
+        <div class="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl p-6 mb-8">
+          <h4 class="text-lg font-semibold text-slate-900 mb-4">📋 Configuration validée</h4>
+          <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="config-item">
+              <span class="config-label">Scénario</span>
+              <span class="config-value">${config.scenario}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">Mode</span>
+              <span class="config-value">${config.mode}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">Associations</span>
+              <span class="config-value">${config.associations}</span>
+            </div>
+            <div class="config-item">
+              <span class="config-label">Total groupes</span>
+              <span class="config-value">${config.totalGroups}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Statistiques pré-génération -->
         <div class="grid md:grid-cols-4 gap-4 mb-8">
           <div class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
             <p class="text-xs uppercase font-semibold text-blue-700 mb-2">Total élèves</p>
@@ -1395,12 +1514,12 @@
           </div>
         </div>
 
+        <!-- Alertes et recommandations -->
         ${warnings.length > 0 ? `
-          <!-- WARNINGS -->
           <div class="mb-8 bg-amber-50 border border-amber-200 rounded-xl p-4">
             <h4 class="font-semibold text-amber-900 mb-3 flex items-center gap-2">
               <i class="fas fa-triangle-exclamation"></i>
-              Vérifications
+              Vérifications avant génération
             </h4>
             <div class="space-y-2">
               ${warnings.map(w => `
@@ -1411,12 +1530,7 @@
               `).join('')}
             </div>
           </div>
-        ` : `
-          <!-- OK -->
-          <div class="mb-8 bg-green-50 border border-green-200 rounded-xl p-4">
-            <div class="flex items-center gap-2 text-green-900 font-semibold">
-              <i class="fas fa-check-circle"></i>
-              Configuration validée ✓
+        ` : ''}
             </div>
           </div>
         `}
@@ -4359,6 +4473,275 @@
 
       .delay-100 { animation-delay: 0.1s; }
       .delay-200 { animation-delay: 0.2s; }
+
+      /* ═══════════════════════════════════════════════════════════════
+         STYLES BASE 10 - CARDES SCÉNARIO ET DISTRIBUTION
+         ═══════════════════════════════════════════════════════════════ */
+
+      .scenario-card {
+        background: white;
+        border: 2px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 24px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .scenario-card:hover {
+        border-color: #6366f1;
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px -12px rgba(99, 102, 241, 0.25);
+      }
+
+      .scenario-card.selected {
+        border-color: #6366f1;
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0e7ff 100%);
+        box-shadow: 0 8px 16px -8px rgba(99, 102, 241, 0.3);
+      }
+
+      .scenario-card.disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+
+      .icon-section {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        color: white;
+      }
+
+      .title-section .title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 4px;
+      }
+
+      .title-section .subtitle {
+        font-size: 14px;
+        color: #64748b;
+        line-height: 1.4;
+      }
+
+      .selected-badge {
+        width: 28px;
+        height: 28px;
+        background: #10b981;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 14px;
+      }
+
+      .scenario-info {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .info-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        color: #475569;
+      }
+
+      .info-item i {
+        color: #6366f1;
+        width: 16px;
+      }
+
+      .distribution-card {
+        background: white;
+        border: 2px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 24px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
+      }
+
+      .distribution-card:hover {
+        border-color: #6366f1;
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px -12px rgba(99, 102, 241, 0.25);
+      }
+
+      .distribution-card.selected {
+        border-color: #6366f1;
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0e7ff 100%);
+        box-shadow: 0 8px 16px -8px rgba(99, 102, 241, 0.3);
+      }
+
+      .distribution-details {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .detail-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        color: #475569;
+      }
+
+      .detail-item i {
+        color: #6366f1;
+        width: 16px;
+      }
+
+      .recommendation-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-top: 8px;
+      }
+
+      .config-item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 12px;
+        background: white;
+        border-radius: 8px;
+      }
+
+      .config-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .config-value {
+        font-size: 16px;
+        font-weight: 700;
+        color: #1e293b;
+      }
+
+      .action-section {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 20px;
+        background: #f8fafc;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+      }
+
+      .action-info {
+        flex: 1;
+      }
+
+      .info-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .info-badge.success {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .info-badge.warning {
+        background: #fef3c7;
+        color: #92400e;
+      }
+
+      .info-badge.info {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+
+      .action-buttons {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .primary-action-btn {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .primary-action-btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px -6px rgba(99, 102, 241, 0.5);
+      }
+
+      .primary-action-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .secondary-action-btn {
+        background: white;
+        color: #64748b;
+        border: 2px solid #e2e8f0;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .secondary-action-btn:hover {
+        border-color: #6366f1;
+        color: #6366f1;
+        background: #f8fafc;
+      }
     `;
 
     documentRef.head.appendChild(style);
@@ -4369,14 +4752,14 @@
   // ═══════════════════════════════════════════════════════════════
 
   const GroupsModuleComplete = {
-    version: '1.0.0',
+    version: '1.0.0-BASE10-SCIENTIFIC',
 
     init() {
-      console.log('✅ GroupsModuleComplete initialisé');
+      console.log('✅ GroupsModuleComplete BASE 10 Scientific initialisé');
     },
 
     open() {
-      console.log('🚀 Ouverture du module complet de groupes');
+      console.log('🚀 Ouverture du module BASE 10 Scientific');
       createModal();
     },
 
@@ -4391,6 +4774,290 @@
     loadTempGroupsUI,
     finalizeTempGroupsUI
   };
+
+  // ═══════════════════════════════════════════════════════════════
+  //  ALGORITHME BASE 10 SCIENTIFIQUE
+  // ═══════════════════════════════════════════════════════════════
+
+  // 🎯 Fonctions scientifiques BASE 10
+  function calculateColumnStatistics(students, column) {
+    console.log(`📊 Calcul statistiques pour colonne: ${column}`);
+    
+    const values = students
+      .map(s => parseFloat(s[column]) || null)
+      .filter(v => v !== null && !isNaN(v));
+    
+    if (values.length === 0) {
+      console.warn(`⚠️ Aucune valeur valide pour la colonne ${column}`);
+      return { mean: 0, std: 1, median: 0, count: 0 };
+    }
+    
+    // Moyenne
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    
+    // Écart-type
+    const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
+    const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
+    const std = Math.sqrt(variance);
+    
+    // Médiane
+    const sorted = [...values].sort((a, b) => a - b);
+    const median = sorted.length % 2 === 0 
+      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+      : sorted[Math.floor(sorted.length / 2)];
+    
+    console.log(`📈 ${column}: μ=${mean.toFixed(2)}, σ=${std.toFixed(2)}, médiane=${median.toFixed(2)}, n=${values.length}`);
+    
+    return { mean, std, median, count: values.length };
+  }
+
+  function calculateAllZScores(students) {
+    console.log('🔄 Étape 1/6: Calcul des Z-scores BASE 10...');
+    
+    const columns = ['SCORE M', 'SCORE F', 'COM', 'TRA', 'PART', 'ABS'];
+    const stats = {};
+    
+    // Calculer statistiques pour chaque colonne
+    columns.forEach(col => {
+      stats[col] = calculateColumnStatistics(students, col);
+    });
+    
+    // Calculer Z-scores pour chaque étudiant
+    const studentsWithZScores = students.map(student => {
+      const zScores = {};
+      
+      columns.forEach(col => {
+        const value = parseFloat(student[col]);
+        const colStats = stats[col];
+        
+        if (!isNaN(value) && colStats.std > 0) {
+          zScores[`z_${col.replace(' ', '')}`] = (value - colStats.mean) / colStats.std;
+        } else {
+          // Imputation par la médiane de la classe en cas de valeur manquante
+          const classMedian = colStats.median;
+          zScores[`z_${col.replace(' ', '')}`] = (classMedian - colStats.mean) / colStats.std;
+        }
+      });
+      
+      return { ...student, ...zScores };
+    });
+    
+    console.log('✅ Z-scores calculés pour tous les étudiants');
+    console.log(`📊 Top 5 étudiants par Z-Score Math:`, 
+      studentsWithZScores
+        .sort((a, b) => (b.z_SCOREM || 0) - (a.z_SCOREM || 0))
+        .slice(0, 5)
+        .map(s => ({ nom: s.nom, zM: (s.z_SCOREM || 0).toFixed(3) }))
+    );
+    
+    return studentsWithZScores;
+  }
+
+  function getDynamicWeights(groupType, distributionType) {
+    console.log(`⚖️ Étape 2/6: Pondérations dynamiques pour ${groupType} (${distributionType})`);
+    
+    const weights = {
+      needs: { 
+        math: 0.35, fr: 0.35, com: 0.15, tra: 0.10, part: 0.05, abs: 0.05 
+      },
+      language: { 
+        math: 0.10, fr: 0.45, com: 0.10, tra: 0.05, part: 0.25, abs: 0.05 
+      },
+      option: { 
+        math: 0.25, fr: 0.25, com: 0.20, tra: 0.15, part: 0.10, abs: 0.05 
+      }
+    };
+    
+    const selectedWeights = weights[groupType] || weights.needs;
+    console.log('🎯 Pondérations appliquées:', selectedWeights);
+    
+    return selectedWeights;
+  }
+
+  function calculateCompositeIndex(studentWithZScores, weights) {
+    console.log('🧮 Étape 3/6: Calcul des indices composites...');
+    
+    const index = 
+      weights.math * (studentWithZScores.z_SCOREM || 0) +
+      weights.fr * (studentWithZScores.z_SCOREF || 0) +
+      weights.com * (studentWithZScores.z_COM || 0) +
+      weights.tra * (studentWithZScores.z_TRA || 0) +
+      weights.part * (studentWithZScores.z_PART || 0) -
+      weights.abs * (studentWithZScores.z_ABS || 0);
+    
+    return { ...studentWithZScores, compositeIndex: index };
+  }
+
+  function distributeHeterogeneous(studentsWithIndex, numGroups) {
+    console.log(`🎲 Étape 4/6: Distribution heterogeneous (serpentine) en ${numGroups} groupes...`);
+    
+    // Trier par indice composite décroissant
+    const sorted = [...studentsWithIndex].sort((a, b) => b.compositeIndex - a.compositeIndex);
+    
+    // Initialiser groupes
+    const groups = Array.from({ length: numGroups }, (_, i) => ({
+      id: i + 1,
+      name: `Groupe ${i + 1}`,
+      students: []
+    }));
+    
+    // Distribution serpentine
+    let direction = 1;
+    let currentGroup = 0;
+    
+    sorted.forEach((student, index) => {
+      groups[currentGroup].students.push(student);
+      
+      // Inverser direction à chaque extrémité
+      if (direction === 1 && currentGroup === numGroups - 1) {
+        direction = -1;
+      } else if (direction === -1 && currentGroup === 0) {
+        direction = 1;
+      } else {
+        currentGroup += direction;
+      }
+    });
+    
+    console.log('✅ Distribution serpentine terminée');
+    return groups;
+  }
+
+  function distributeHomogeneous(studentsWithIndex, numGroups) {
+    console.log(`📊 Étape 4/6: Distribution homogeneous (quantiles) en ${numGroups} groupes...`);
+    
+    // Trier par indice composite décroissant
+    const sorted = [...studentsWithIndex].sort((a, b) => b.compositeIndex - a.compositeIndex);
+    const totalStudents = sorted.length;
+    const studentsPerGroup = Math.ceil(totalStudents / numGroups);
+    
+    // Créer groupes par quantiles
+    const groups = [];
+    for (let i = 0; i < numGroups; i++) {
+      const start = i * studentsPerGroup;
+      const end = Math.min(start + studentsPerGroup, totalStudents);
+      const groupStudents = sorted.slice(start, end);
+      
+      groups.push({
+        id: i + 1,
+        name: `Groupe ${i + 1}`,
+        students: groupStudents
+      });
+    }
+    
+    console.log('✅ Distribution par quantiles terminée');
+    return groups;
+  }
+
+  function enforceGenderParity(groups) {
+    console.log('⚖️ Étape 5/6: Contrôle de parité F/M...');
+    
+    let parityViolations = 0;
+    
+    groups.forEach(group => {
+      const females = group.students.filter(s => s.SEXE === 'F').length;
+      const males = group.students.filter(s => s.SEXE === 'M').length;
+      const diff = Math.abs(females - males);
+      
+      group.stats = {
+        ...group.stats,
+        females,
+        males,
+        parityRatio: `${females}F/${males}M`,
+        parityAlert: diff > 1
+      };
+      
+      if (diff > 1) {
+        parityViolations++;
+        console.warn(`⚠️ Groupe ${group.name}: déséquilibre parité (${females}F/${males}M)`);
+      }
+    });
+    
+    console.log(`✅ Contrôle parité terminé: ${parityViolations} groupe(s) avec déséquilibre`);
+    return groups;
+  }
+
+  function calculateGroupStatistics(groups) {
+    console.log('📈 Étape 6/6: Calcul des statistiques temps réel...');
+    
+    groups.forEach(group => {
+      const students = group.students;
+      if (students.length === 0) return;
+      
+      // Moyennes des scores
+      const avgM = students.reduce((sum, s) => sum + (parseFloat(s['SCORE M']) || 0), 0) / students.length;
+      const avgF = students.reduce((sum, s) => sum + (parseFloat(s['SCORE F']) || 0), 0) / students.length;
+      const avgCOM = students.reduce((sum, s) => sum + (parseFloat(s.COM) || 0), 0) / students.length;
+      const avgTRA = students.reduce((sum, s) => sum + (parseFloat(s.TRA) || 0), 0) / students.length;
+      const avgPART = students.reduce((sum, s) => sum + (parseFloat(s.PART) || 0), 0) / students.length;
+      const totalABS = students.reduce((sum, s) => sum + (parseFloat(s.ABS) || 0), 0);
+      const avgIndex = students.reduce((sum, s) => sum + (s.compositeIndex || 0), 0) / students.length;
+      
+      group.detailedStats = {
+        totalStudents: students.length,
+        avgM: avgM.toFixed(2),
+        avgF: avgF.toFixed(2),
+        avgCOM: avgCOM.toFixed(2),
+        avgTRA: avgTRA.toFixed(2),
+        avgPART: avgPART.toFixed(2),
+        totalABS: totalABS.toFixed(0),
+        avgIndex: avgIndex.toFixed(3)
+      };
+      
+      group.stats = {
+        ...group.stats,
+        avgIndex: avgIndex
+      };
+    });
+    
+    console.log('✅ Statistiques temps réel calculées pour tous les groupes');
+    return groups;
+  }
+
+  // 🚀 Fonction principale de génération BASE 10
+  function generateGroupsLocally() {
+    console.log('🚀 DÉMARRAGE ALGORITHME BASE 10 SCIENTIFIQUE');
+    
+    try {
+      // Étape 1: Z-Scores
+      const studentsWithZScores = calculateAllZScores(state.students);
+      
+      // Étape 2: Pondérations dynamiques
+      const weights = getDynamicWeights(state.groupType, state.distributionType);
+      
+      // Étape 3: Indices composites
+      const studentsWithIndex = studentsWithZScores.map(student => 
+        calculateCompositeIndex(student, weights)
+      );
+      
+      // Étape 4: Distribution stratégique
+      let groups;
+      if (state.distributionType === 'heterogeneous') {
+        groups = distributeHeterogeneous(studentsWithIndex, state.numGroups);
+      } else {
+        groups = distributeHomogeneous(studentsWithIndex, state.numGroups);
+      }
+      
+      // Étape 5: Contrôle parité
+      groups = enforceGenderParity(groups);
+      
+      // Étape 6: Statistiques temps réel
+      groups = calculateGroupStatistics(groups);
+      
+      console.log('✅ ALGORITHME BASE 10 TERMINÉ AVEC SUCCÈS');
+      
+      // Afficher résumé
+      console.log('📊 Résumé des groupes créés:');
+      groups.forEach(group => {
+        console.log(`  ${group.name}: ${group.students.length} élèves, indice moyen: ${(group.stats?.avgIndex || 0).toFixed(3)}`);
+      });
+      
+      return groups;
+      
+    } catch (error) {
+      console.error('❌ ERREUR ALGORITHME BASE 10:', error);
+      throw error;
+    }
+  }
 
   // Injecter les styles
   injectStyles();
