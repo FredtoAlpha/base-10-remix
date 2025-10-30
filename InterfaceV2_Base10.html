@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <script>console.log("BASE10_DEBUG: InterfaceV2_Base10.html - BASE 10 Remix Architecture");</script>
+  
+  <!-- Bloquer document.write pour éviter injection HTML dans JS lors de OAuth -->
+  <script>
+  (function(){
+    try {
+      var p = new URLSearchParams(location.search);
+      if (p.get('createOAuthDialog') === 'true') {
+        var orig = document.write.bind(document);
+        document.write = function(s){
+          console.warn('Blocked document.write from external script:', String(s).slice(0,60));
+        };
+      }
+    } catch(e){}
+  })();
+  </script>
+  
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BASE 10 REMIX - Groupes Intelligents</title>
+  
+  <!-- Toutes les dépendances centralisées (héritage BASE 8) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  
+  <!-- Styles BASE 8 hérités -->
+  <style id="interfaceV2-styles">
+    <?!= include('InterfaceV2_Styles'); ?>
+  </style>
+  
+  <!-- Styles spécifiques BASE 10 -->
+  <style id="base10-styles">
+    /* Layout deux panneaux permanents */
+    .base10-container {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 24px;
+      height: 100vh;
+      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    }
+    
+    .base10-config-panel {
+      background: white;
+      border-right: 1px solid #e2e8f0;
+      overflow-y: auto;
+      box-shadow: 2px 0 8px rgba(0,0,0,0.05);
+    }
+    
+    .base10-workspace-panel {
+      background: white;
+      overflow-y: auto;
+      position: relative;
+    }
+    
+    /* Accordion Components BASE 10 */
+    .base10-accordion {
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    
+    .base10-accordion.active {
+      border-color: #3b82f6;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    }
+    
+    .base10-accordion-header {
+      padding: 16px 20px;
+      background: #f8fafc;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.2s ease;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .base10-accordion.active .base10-accordion-header {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      border-bottom-color: transparent;
+    }
+    
+    .base10-accordion-content {
+      padding: 0;
+      max-height: 0;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    
+    .base10-accordion.active .base10-accordion-content {
+      padding: 20px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    
+    .base10-accordion-icon {
+      transition: transform 0.3s ease;
+      font-size: 14px;
+    }
+    
+    .base10-accordion.active .base10-accordion-icon {
+      transform: rotate(180deg);
+    }
+    
+    /* Strategy Cards BASE 10 */
+    .base10-strategy-card {
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 12px;
+    }
+    
+    .base10-strategy-card:hover {
+      border-color: #3b82f6;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    }
+    
+    .base10-strategy-card.selected {
+      border-color: #3b82f6;
+      background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+    }
+    
+    /* Workspace Groups BASE 10 */
+    .base10-groups-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      padding: 20px;
+    }
+    
+    .base10-group-card {
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      background: white;
+      transition: all 0.2s ease;
+      min-height: 200px;
+    }
+    
+    .base10-group-card:hover {
+      border-color: #3b82f6;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    }
+    
+    .base10-group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    
+    .base10-group-title {
+      font-weight: 600;
+      color: #1e293b;
+      font-size: 16px;
+    }
+    
+    .base10-group-badge {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .base10-badge-balance {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+    }
+    
+    .base10-group-students {
+      min-height: 120px;
+      border: 1px dashed #e2e8f0;
+      border-radius: 8px;
+      padding: 8px;
+    }
+    
+    .base10-student-item {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 6px;
+      cursor: move;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .base10-student-item:hover {
+      background: #e0f2fe;
+      border-color: #3b82f6;
+      transform: translateX(4px);
+    }
+    
+    /* Statistics Panel BASE 10 */
+    .base10-stats-panel {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px;
+      transition: all 0.3s ease;
+    }
+    
+    .base10-stats-panel.collapsed {
+      padding: 12px 20px;
+    }
+    
+    .base10-stats-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      cursor: pointer;
+    }
+    
+    .base10-stats-content {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    
+    .base10-stat-item {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+    }
+    
+    .base10-stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    
+    .base10-stat-label {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+    
+    /* Action Bar BASE 10 */
+    .base10-action-bar {
+      background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+      color: white;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .base10-action-buttons {
+      display: flex;
+      gap: 12px;
+    }
+    
+    .base10-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      border: none;
+    }
+    
+    .base10-btn-primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+    }
+    
+    .base10-btn-primary:hover {
+      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+    }
+    
+    .base10-btn-secondary {
+      background: #64748b;
+      color: white;
+    }
+    
+    .base10-btn-secondary:hover {
+      background: #475569;
+    }
+    
+    /* Student Selection BASE 10 */
+    .base10-student-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    
+    .base10-student-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    
+    .base10-student-checkbox:hover {
+      background: #f1f5f9;
+    }
+    
+    .base10-student-checkbox.selected {
+      background: #dbeafe;
+      border: 1px solid #3b82f6;
+    }
+    
+    /* Responsive BASE 10 */
+    @media (max-width: 1024px) {
+      .base10-container {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+      }
+      
+      .base10-config-panel {
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+        max-height: 50vh;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Container principal BASE 10 -->
+  <div class="base10-container">
+    
+    <!-- Panneau Gauche: Configuration Guidée -->
+    <div class="base10-config-panel">
+      <div class="p-6">
+        <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+          <i class="fas fa-cog text-blue-600"></i>
+          Configuration des Groupes
+        </h2>
+        
+        <!-- Étape 1: Objectif du regroupement -->
+        <div class="base10-accordion active" id="accordion-strategy">
+          <div class="base10-accordion-header" onclick="Base10UI.toggleAccordion('strategy')">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
+              <span class="font-semibold">Objectif du regroupement</span>
+            </div>
+            <i class="fas fa-chevron-down base10-accordion-icon"></i>
+          </div>
+          <div class="base10-accordion-content">
+            <!-- Strategy Cards -->
+            <div class="space-y-3">
+              <div class="base10-strategy-card" onclick="Base10UI.selectStrategy('needs')">
+                <div class="flex items-start gap-3">
+                  <div class="text-2xl">📊</div>
+                  <div>
+                    <h4 class="font-semibold text-gray-800">Groupes de Besoins</h4>
+                    <p class="text-sm text-gray-600 mt-1">Groupes hétérogènes basés sur les scores Math/Français et critères pédagogiques</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="base10-strategy-card" onclick="Base10UI.selectStrategy('language')">
+                <div class="flex items-start gap-3">
+                  <div class="text-2xl">🗣️</div>
+                  <div>
+                    <h4 class="font-semibold text-gray-800">Groupes LV2</h4>
+                    <p class="text-sm text-gray-600 mt-1">Groupes de langues (ESP/ITA) avec priorité à la participation</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="base10-strategy-card" onclick="Base10UI.selectStrategy('options')">
+                <div class="flex items-start gap-3">
+                  <div class="text-2xl">⚙️</div>
+                  <div>
+                    <h4 class="font-semibold text-gray-800">Groupes Options</h4>
+                    <p class="text-sm text-gray-600 mt-1">Groupes basés sur les options et préférences des élèves</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Taille des groupes -->
+            <div class="mt-6">
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                Nombre de groupes: <span id="groupSizeValue" class="text-blue-600 font-bold">5</span>
+              </label>
+              <input type="range" id="groupSizeSlider" min="2" max="10" value="5" 
+                     class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                     oninput="Base10UI.updateGroupSize(this.value)">
+              <div class="flex justify-between text-xs text-gray-500 mt-1">
+                <span>2</span>
+                <span>10</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Étape 2: Participants -->
+        <div class="base10-accordion" id="accordion-participants">
+          <div class="base10-accordion-header" onclick="Base10UI.toggleAccordion('participants')">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</div>
+              <span class="font-semibold">Participants</span>
+              <span id="selectedCount" class="text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded-full">0 élève(s)</span>
+            </div>
+            <i class="fas fa-chevron-down base10-accordion-icon"></i>
+          </div>
+          <div class="base10-accordion-content">
+            <!-- Recherche -->
+            <div class="mb-4">
+              <div class="relative">
+                <input type="text" id="studentSearch" placeholder="Rechercher un élève..." 
+                       class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                       oninput="Base10UI.filterStudents(this.value)">
+                <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+              </div>
+            </div>
+            
+            <!-- Actions de sélection -->
+            <div class="flex gap-2 mb-4">
+              <button onclick="Base10UI.selectAllStudents()" class="base10-btn base10-btn-secondary text-sm">
+                <i class="fas fa-check-square mr-1"></i> Tout sélectionner
+              </button>
+              <button onclick="Base10UI.deselectAllStudents()" class="base10-btn base10-btn-secondary text-sm">
+                <i class="fas fa-square mr-1"></i> Tout désélectionner
+              </button>
+            </div>
+            
+            <!-- Liste des élèves -->
+            <div id="studentList" class="base10-student-grid">
+              <!-- Dynamiquement rempli -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- Étape 3: Options avancées -->
+        <div class="base10-accordion" id="accordion-options">
+          <div class="base10-accordion-header" onclick="Base10UI.toggleAccordion('options')">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 bg-gray-400 text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
+              <span class="font-semibold">Options avancées</span>
+            </div>
+            <i class="fas fa-chevron-down base10-accordion-icon"></i>
+          </div>
+          <div class="base10-accordion-content">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Mode de persistance</label>
+                <select id="persistMode" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                  <option value="continue">Continue (suite logique)</option>
+                  <option value="replace">Replace (recommence à 1)</option>
+                </select>
+              </div>
+              
+              <div>
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" id="balanceGender" class="rounded">
+                  <span class="text-sm">Équilibrer genre (F/H)</span>
+                </label>
+              </div>
+              
+              <div>
+                <label class="flex items-center gap-2">
+                  <input type="checkbox" id="balanceScores" class="rounded">
+                  <span class="text-sm">Équilibrer scores Math/Français</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Bouton de génération -->
+        <button onclick="Base10UI.generateGroups()" class="w-full base10-btn base10-btn-primary py-3 text-lg font-semibold">
+          <i class="fas fa-magic mr-2"></i> Générer les groupes
+        </button>
+      </div>
+    </div>
+    
+    <!-- Panneau Droit: Espace de Travail -->
+    <div class="base10-workspace-panel">
+      <!-- Barre d'actions -->
+      <div class="base10-action-bar">
+        <div class="flex items-center gap-3">
+          <h3 class="text-lg font-semibold">Espace de Travail</h3>
+          <span id="workspaceStatus" class="text-sm bg-green-600 px-2 py-1 rounded">Prêt</span>
+        </div>
+        <div class="base10-action-buttons">
+          <button onclick="Base10UI.regenerateGroups()" class="base10-btn base10-btn-secondary">
+            <i class="fas fa-redo mr-1"></i> Régénérer
+          </button>
+          <button onclick="Base10UI.saveGroups()" class="base10-btn base10-btn-secondary">
+            <i class="fas fa-save mr-1"></i> Sauvegarder
+          </button>
+          <button onclick="Base10UI.finalizeGroups()" class="base10-btn base10-btn-primary">
+            <i class="fas fa-check mr-1"></i> Finaliser
+          </button>
+        </div>
+      </div>
+      
+      <!-- Grille des groupes -->
+      <div id="groupsContainer" class="base10-groups-grid">
+        <!-- Dynamiquement rempli -->
+        <div class="col-span-full text-center py-12 text-gray-500">
+          <i class="fas fa-users text-6xl mb-4"></i>
+          <p class="text-lg">Configurez les groupes dans le panneau de gauche</p>
+          <p class="text-sm mt-2">Les groupes apparaîtront ici pour manipulation</p>
+        </div>
+      </div>
+      
+      <!-- Panel statistiques -->
+      <div id="statsPanel" class="base10-stats-panel collapsed">
+        <div class="base10-stats-header" onclick="Base10UI.toggleStats()">
+          <h4 class="font-semibold text-gray-800">
+            <i class="fas fa-chart-bar mr-2"></i> Statistiques de répartition
+          </h4>
+          <i class="fas fa-chevron-down" id="statsToggleIcon"></i>
+        </div>
+        <div id="statsContent" class="base10-stats-content" style="display: none;">
+          <!-- Dynamiquement rempli -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inclusion du module groups (respect architecture BASE 8) -->
+  <?!= include('groupsModuleComplete'); ?>
+  
+  <!-- Script principal BASE 10 -->
+  <script>
+    // ═══════════════════════════════════════════════════════════════
+    //  BASE 10 REMIX - CONTROLLER
+    //  Respect strict de l'architecture BASE 8
+    // ═══════════════════════════════════════════════════════════════
+    
+    const Base10UI = {
+      state: {
+        strategy: null,
+        groupSize: 5,
+        selectedStudents: [],
+        allStudents: [],
+        groups: [],
+        showStats: false,
+        activeAccordion: 'strategy'
+      },
+      
+      init() {
+        console.log('🚀 BASE 10 REMIX - Initialisation...');
+        this.loadStudents();
+        this.bindEvents();
+        this.updateUI();
+      },
+      
+      loadStudents() {
+        // Charger les élèves depuis Apps Script
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+          google.script.run
+            .withSuccessHandler((response) => {
+              if (response.success) {
+                this.state.allStudents = response.students;
+                this.renderStudentList();
+                console.log(`✅ ${response.students.length} élèves chargés`);
+              } else {
+                console.error('❌ Erreur chargement élèves:', response.error);
+                this.showMessage('Erreur: ' + response.error, 'error');
+              }
+            })
+            .withFailureHandler((error) => {
+              console.error('❌ Erreur Apps Script:', error);
+              this.showMessage('Erreur de connexion au serveur', 'error');
+            })
+            .getBase10Students();
+        } else {
+          // Mode développement hors Apps Script
+          this.state.allStudents = [
+            { id: 1, name: 'Martin Sophie', class: '3èmeA', gender: 'F', scores: { maths: 15, french: 14 } },
+            { id: 2, name: 'Dupont Pierre', class: '3èmeA', gender: 'M', scores: { maths: 13, french: 12 } },
+            { id: 3, name: 'Bernard Marie', class: '3èmeB', gender: 'F', scores: { maths: 11, french: 13 } },
+            { id: 4, name: 'Petit Jean', class: '3èmeB', gender: 'M', scores: { maths: 14, french: 15 } },
+            { id: 5, name: 'Robert Claire', class: '3èmeA', gender: 'F', scores: { maths: 16, french: 12 } },
+            { id: 6, name: 'Durand Thomas', class: '3èmeB', gender: 'M', scores: { maths: 12, french: 14 } }
+          ];
+          this.renderStudentList();
+        }
+      },
+      
+      bindEvents() {
+        // Écouteurs d'événements
+        document.addEventListener('keydown', (e) => {
+          if (e.ctrlKey && e.key === 'g') {
+            e.preventDefault();
+            this.generateGroups();
+          }
+        });
+      },
+      
+      toggleAccordion(id) {
+        const accordion = document.getElementById(`accordion-${id}`);
+        const wasActive = accordion.classList.contains('active');
+        
+        // Fermer tous les accordéons
+        document.querySelectorAll('.base10-accordion').forEach(acc => {
+          acc.classList.remove('active');
+        });
+        
+        // Ouvrir celui cliqué s'il n'était pas actif
+        if (!wasActive) {
+          accordion.classList.add('active');
+          this.state.activeAccordion = id;
+        }
+        
+        this.updateUI();
+      },
+      
+      selectStrategy(strategy) {
+        this.state.strategy = strategy;
+        
+        // Mettre à jour les cartes
+        document.querySelectorAll('.base10-strategy-card').forEach(card => {
+          card.classList.remove('selected');
+        });
+        event.currentTarget.classList.add('selected');
+        
+        // Ouvrir automatiquement l'étape 2
+        this.toggleAccordion('participants');
+      },
+      
+      updateGroupSize(value) {
+        this.state.groupSize = parseInt(value);
+        document.getElementById('groupSizeValue').textContent = value;
+      },
+      
+      filterStudents(searchTerm) {
+        const filtered = this.state.allStudents.filter(student => 
+          student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          student.class.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        this.renderStudentList(filtered);
+      },
+      
+      selectAllStudents() {
+        this.state.selectedStudents = [...this.state.allStudents];
+        this.renderStudentList();
+        this.updateSelectedCount();
+      },
+      
+      deselectAllStudents() {
+        this.state.selectedStudents = [];
+        this.renderStudentList();
+        this.updateSelectedCount();
+      },
+      
+      toggleStudent(studentId) {
+        const index = this.state.selectedStudents.findIndex(s => s.id === studentId);
+        if (index >= 0) {
+          this.state.selectedStudents.splice(index, 1);
+        } else {
+          const student = this.state.allStudents.find(s => s.id === studentId);
+          if (student) this.state.selectedStudents.push(student);
+        }
+        
+        this.updateSelectedCount();
+      },
+      
+      updateSelectedCount() {
+        const count = this.state.selectedStudents.length;
+        document.getElementById('selectedCount').textContent = `${count} élève(s)`;
+      },
+      
+      renderStudentList(students = this.state.allStudents) {
+        const container = document.getElementById('studentList');
+        
+        if (students.length === 0) {
+          container.innerHTML = '<p class="text-center text-gray-500 py-4">Aucun élève trouvé</p>';
+          return;
+        }
+        
+        container.innerHTML = students.map(student => {
+          const isSelected = this.state.selectedStudents.some(s => s.id === student.id);
+          return `
+            <div class="base10-student-checkbox ${isSelected ? 'selected' : ''}" 
+                 onclick="Base10UI.toggleStudent(${student.id})">
+              <input type="checkbox" ${isSelected ? 'checked' : ''} class="rounded">
+              <div class="flex-1">
+                <div class="font-medium text-sm">${student.name}</div>
+                <div class="text-xs text-gray-500">${student.class}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      },
+      
+      generateGroups() {
+        if (!this.state.strategy) {
+          alert('Veuillez sélectionner une stratégie de groupement');
+          return;
+        }
+        
+        if (this.state.selectedStudents.length === 0) {
+          alert('Veuillez sélectionner au moins un élève');
+          return;
+        }
+        
+        console.log('🎲 Génération des groupes...', {
+          strategy: this.state.strategy,
+          groupSize: this.state.groupSize,
+          studentCount: this.state.selectedStudents.length
+        });
+        
+        // Simuler génération (remplacer par algorithme réel)
+        this.state.groups = this.createMockGroups();
+        this.renderGroups();
+        this.calculateStatistics();
+        
+        // Mettre à jour le statut
+        document.getElementById('workspaceStatus').textContent = 'Groupes générés';
+        document.getElementById('workspaceStatus').className = 'text-sm bg-green-600 px-2 py-1 rounded';
+      },
+      
+      createMockGroups() {
+        const groups = [];
+        const studentsPerGroup = Math.ceil(this.state.selectedStudents.length / this.state.groupSize);
+        
+        for (let i = 0; i < this.state.groupSize; i++) {
+          const start = i * studentsPerGroup;
+          const end = Math.min(start + studentsPerGroup, this.state.selectedStudents.length);
+          const groupStudents = this.state.selectedStudents.slice(start, end);
+          
+          groups.push({
+            id: i + 1,
+            name: `Groupe ${i + 1}`,
+            students: groupStudents,
+            balance: Math.floor(Math.random() * 20) + 80 // 80-100%
+          });
+        }
+        
+        return groups;
+      },
+      
+      renderGroups() {
+        const container = document.getElementById('groupsContainer');
+        
+        container.innerHTML = this.state.groups.map(group => `
+          <div class="base10-group-card" id="group-${group.id}">
+            <div class="base10-group-header">
+              <div class="base10-group-title">${group.name}</div>
+              <div class="base10-group-badge base10-badge-balance">
+                ⚖️ ${group.balance}%
+              </div>
+            </div>
+            <div class="base10-group-students" id="group-students-${group.id}">
+              ${group.students.map(student => `
+                <div class="base10-student-item">
+                  <i class="fas fa-grip-vertical text-gray-400"></i>
+                  <div class="flex-1">
+                    <div class="font-medium text-sm">${student.name}</div>
+                    <div class="text-xs text-gray-500">${student.class}</div>
+                  </div>
+                  <div class="text-xs">
+                    ${student.gender === 'F' ? '♀️' : '♂️'} 
+                    ${student.scores ? Math.round((student.scores.maths + student.scores.french) / 2) : '--'}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('');
+        
+        // Initialiser SortableJS pour drag & drop
+        this.state.groups.forEach(group => {
+          new Sortable(document.getElementById(`group-students-${group.id}`), {
+            group: 'groups',
+            animation: 150,
+            ghostClass: 'opacity-50',
+            onEnd: () => this.calculateStatistics()
+          });
+        });
+      },
+      
+      calculateStatistics() {
+        // Calculer les statistiques (simulation)
+        const stats = {
+          totalStudents: this.state.selectedStudents.length,
+          totalGroups: this.state.groups.length,
+          averageBalance: Math.round(this.state.groups.reduce((sum, g) => sum + g.balance, 0) / this.state.groups.length),
+          genderBalance: Math.floor(Math.random() * 20) + 80
+        };
+        
+        this.renderStatistics(stats);
+      },
+      
+      renderStatistics(stats) {
+        const content = document.getElementById('statsContent');
+        content.innerHTML = `
+          <div class="base10-stat-item">
+            <div class="base10-stat-value">${stats.totalStudents}</div>
+            <div class="base10-stat-label">Total élèves</div>
+          </div>
+          <div class="base10-stat-item">
+            <div class="base10-stat-value">${stats.totalGroups}</div>
+            <div class="base10-stat-label">Groupes créés</div>
+          </div>
+          <div class="base10-stat-item">
+            <div class="base10-stat-value">${stats.averageBalance}%</div>
+            <div class="base10-stat-label">Équilibre moyen</div>
+          </div>
+          <div class="base10-stat-item">
+            <div class="base10-stat-value">${stats.genderBalance}%</div>
+            <div class="base10-stat-label">Équilibre genre</div>
+          </div>
+        `;
+      },
+      
+      toggleStats() {
+        const panel = document.getElementById('statsPanel');
+        const content = document.getElementById('statsContent');
+        const icon = document.getElementById('statsToggleIcon');
+        
+        this.state.showStats = !this.state.showStats;
+        
+        if (this.state.showStats) {
+          panel.classList.remove('collapsed');
+          content.style.display = 'grid';
+          icon.className = 'fas fa-chevron-up';
+        } else {
+          panel.classList.add('collapsed');
+          content.style.display = 'none';
+          icon.className = 'fas fa-chevron-down';
+        }
+      },
+      
+      regenerateGroups() {
+        this.generateGroups();
+      },
+      
+      saveGroups() {
+        if (this.state.groups.length === 0) {
+          this.showMessage('Aucun groupe à sauvegarder', 'warning');
+          return;
+        }
+        
+        console.log('💾 Sauvegarde des groupes...');
+        
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+          const groupsData = {
+            groups: this.state.groups,
+            strategy: this.state.strategy,
+            metadata: {
+              groupSize: this.state.groupSize,
+              studentCount: this.state.selectedStudents.length,
+              timestamp: Date.now()
+            }
+          };
+          
+          google.script.run
+            .withSuccessHandler((response) => {
+              if (response.success) {
+                this.showMessage(`${response.groupsCount} groupes sauvegardés avec succès !`, 'success');
+                console.log('✅ Groupes sauvegardés:', response);
+              } else {
+                this.showMessage('Erreur: ' + response.error, 'error');
+              }
+            })
+            .withFailureHandler((error) => {
+              console.error('❌ Erreur sauvegarde:', error);
+              this.showMessage('Erreur lors de la sauvegarde', 'error');
+            })
+            .saveBase10Groups(groupsData);
+        } else {
+          // Mode développement
+          this.showMessage('Groupes sauvegardés (mode développement)', 'success');
+        }
+      },
+      
+      finalizeGroups() {
+        if (this.state.groups.length === 0) {
+          this.showMessage('Aucun groupe à finaliser', 'warning');
+          return;
+        }
+        
+        if (confirm('Finaliser ces groupes ? Cette action va les sauvegarder définitivement.')) {
+          console.log('✅ Finalisation des groupes...');
+          this.saveGroups();
+        }
+      },
+      
+      showMessage(message, type = 'info') {
+        // Créer un toast message
+        const toast = document.createElement('div');
+        const colors = {
+          success: 'bg-green-500',
+          error: 'bg-red-500',
+          warning: 'bg-yellow-500',
+          info: 'bg-blue-500'
+        };
+        
+        toast.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300`;
+        toast.innerHTML = `
+          <div class="flex items-center gap-2">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+            <span>${message}</span>
+          </div>
+        `;
+        
+        document.body.appendChild(toast);
+        
+        // Auto-remove après 3 secondes
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      },
+      
+      updateUI() {
+        this.updateSelectedCount();
+      }
+    };
+    
+    // ═══════════════════════════════════════════════════════════════
+    //  INITIALISATION BASE 10
+    // ═══════════════════════════════════════════════════════════════
+    
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('🚀 BASE 10 REMIX - Démarrage...');
+      
+      // Attendre que le module groups soit chargé
+      setTimeout(() => {
+        if (window.GroupsModuleComplete) {
+          console.log('✅ Module groups détecté, initialisation BASE 10...');
+          Base10UI.init();
+        } else {
+          console.error('❌ Module groups non détecté');
+        }
+      }, 100);
+    });
+    
+  </script>
+</body>
+</html>

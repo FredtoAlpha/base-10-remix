@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir /s /b *.html)",
+      "Bash(dir /s /b *.js *.vue *.json)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(node --check:*)",
+      "Bash(cat:*)",
+      "Bash(echo:*)",
+      "Bash(node:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
