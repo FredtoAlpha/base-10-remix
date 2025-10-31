@@ -7426,6 +7426,16 @@ function openGroupsModuleV4Manager() {
   openGroupsInterface('manager');
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ALIAS POUR COMPATIBILITÉ - openGroupsPopup
+// ═══════════════════════════════════════════════════════════════
+// Alias pour la compatibilité rétroactive avec l'ancienne API
+// Redirige vers openGroupsInterface pour une architecture centralisée
+window.openGroupsPopup = function(mode = 'creator') {
+  console.log('ℹ️ openGroupsPopup est un alias - Redirection vers openGroupsInterface');
+  openGroupsInterface(mode);
+};
+
 // 2. Fonction pour notifier les changements de groupes
 window.notifyGroupsChanged = function() {
   console.log('📢 Notification de changement de groupes reçue');
