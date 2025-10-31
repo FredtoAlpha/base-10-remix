@@ -908,18 +908,11 @@
       <!-- Sous-groupe Admin -->
       <div id="headerAdminGroup" class="flex items-center gap-2">
 
-      <button id="btnBase10" data-tour="base10-btn"
+      <button id="btnFinaliser"
               class="header-btn flex items-center gap-2 rounded-lg
                      tracking-[-0.04em]
-                     text-blue-900 bg-blue-400/30
-                     border border-blue-600/30
-                     shadow-[0_12px_24px_rgba(59,130,246,.4)]
-                     hover:bg-blue-400/40
-                     dark:text-blue-300 dark:bg-blue-500/20 dark:border-blue-400/30 dark:hover:bg-blue-500/30"
-              title="BASE 10 REMIX - Interface de groupement intelligente"
-              onclick="Base10UI.open()">
-        <span class="emoji opacity-90">🚀</span>
-        <span>BASE 10</span>
+                     text-emerald-900 bg-emerald-400/30
+                     border border-emerald-600/30
                      shadow-[0_12px_24px_rgba(16,185,129,.4)]
                      hover:bg-emerald-400/40
                      dark:text-emerald-300 dark:bg-emerald-500/20 dark:border-emerald-400/30 dark:hover:bg-emerald-500/30"
@@ -1295,10 +1288,13 @@
 </div>
 
   <!-- Scripts HtmlService injectés en fin de document pour garantir leur exécution après le chargement du DOM -->
-  
+
   <!-- 1. CHARGER LES MODULES DE BASE EN PREMIER (Config, State, Utils, Toast, Spinner) -->
   <?!= include('InterfaceV2_Modules_Loader'); ?>
-  
+
+  <!-- 1.5. CHARGER LE MODULE GROUPES AVANT CORESCRIPT (pour que openGroupsInterface() le trouve) -->
+  <?!= include('groupsModuleComplete'); ?>
+
   <!-- 2. CHARGER LE SCRIPT PRINCIPAL (qui dépend des modules de base) -->
   <?!= include('InterfaceV2_CoreScript'); ?>
 
@@ -1835,9 +1831,7 @@
 </div>
 <!-- FIN Menu Admin -->
 
-<!-- ========== INCLUSION DU MODULE COMPLET DE GROUPES (GOOGLE APPS SCRIPT) ========== -->
-<?!= include('groupsModuleComplete'); ?>
-
+<!-- ========== MODULE GROUPES INCLUS À LA LIGNE 1296 ========== -->
   <?!= include('InterfaceV2_GroupsScript'); ?>
 
 <!-- ============================================================ -->
@@ -3469,13 +3463,152 @@ const Base10UI = {
   }
 };
 
-// Détecter si BASE 10 est appelé et l'ouvrir automatiquement
-if (window.location.search.includes('base10=true') || 
-    document.title.includes('BASE 10 REMIX')) {
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => Base10UI.open(), 500);
-  });
+// BASE 10 REMIX est maintenant orchestré via GroupsModuleComplete
+// L'interface est accessible via le menu Admin (Groupes > Créer/Gérer les groupes)
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODULE GROUPES BASE 10 - GroupsModuleComplete
+     (Inclus à la ligne 1296 pour être disponible à openGroupsInterface)
+     ═══════════════════════════════════════════════════════════════ -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  INTÉGRATION MODULE GROUPES DANS INTERFACEV2
+// ═══════════════════════════════════════════════════════════════
+
+// Fonction principale d'ouverture de l'interface groupes
+function openGroupsInterface(mode = 'creator') {
+  console.log(`🚀 Ouverture de l'interface des groupes (mode: ${mode})...`);
+
+  // 🔑 Vérifier si le module GroupsModuleComplete est disponible
+  // Si non disponible, attendre 500ms puis retenter (une seule fois)
+  const tryOpenGroups = () => {
+    if (typeof window.GroupsModuleComplete !== 'undefined' && window.GroupsModuleComplete) {
+      try {
+        console.log('✅ GroupsModuleComplete trouvé, initialisation...');
+
+        // Initialiser et ouvrir le module
+        if (typeof window.GroupsModuleComplete.init === 'function') {
+          window.GroupsModuleComplete.init();
+        }
+
+        // Configurer le mode
+        if (typeof window.GroupsModuleComplete.setState === 'function') {
+          if (mode === 'manager') {
+            window.GroupsModuleComplete.setState({ mode: 'manager' });
+          } else {
+            window.GroupsModuleComplete.setState({ mode: 'creator' });
+          }
+        }
+
+        // Ouvrir l'interface
+        if (typeof window.GroupsModuleComplete.open === 'function') {
+          window.GroupsModuleComplete.open();
+          console.log('✅ GroupsModuleComplete ouvert avec succès');
+          return true;
+        }
+      } catch (error) {
+        console.error('❌ Erreur lors de l\'ouverture de GroupsModuleComplete:', error);
+      }
+    }
+
+    return false;
+  };
+
+  // 1ère tentative immédiate
+  if (tryOpenGroups()) {
+    return;
+  }
+
+  // 2ème tentative après 500ms (le module peut encore se charger)
+  console.warn('⚠️ GroupsModuleComplete pas encore disponible, nouvelle tentative dans 500ms...');
+  setTimeout(() => {
+    if (!tryOpenGroups()) {
+      console.warn('⚠️ GroupsModuleComplete toujours non disponible, fallback vers interface popup...');
+      openGroupsPopup(mode);
+    }
+  }, 500);
 }
+
+// Fallback vers l'ancienne interface popup
+function openGroupsPopup(mode) {
+  console.log(`🔄 Ouverture de l'interface popup fallback (mode: ${mode})`);
+  
+  // Créer une popup simple en attendant
+  const popup = document.createElement('div');
+  popup.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  popup.innerHTML = `
+    <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+      <h3 class="text-xl font-bold mb-4">Interface Groupes</h3>
+      <p class="text-gray-600 mb-4">Module GroupsModuleComplete en cours de chargement...</p>
+      <div class="flex justify-center">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+      <button onclick="this.closest('.fixed').remove()" class="mt-4 w-full bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded">
+        Fermer
+      </button>
+    </div>
+  `;
+  document.body.appendChild(popup);
+  
+  // Retenter après 2 secondes
+  setTimeout(() => {
+    popup.remove();
+    if (typeof GroupsModuleComplete !== 'undefined') {
+      openGroupsInterface(mode);
+    } else {
+      showToast('Module groupes non disponible', 'error');
+    }
+  }, 2000);
+}
+
+// Fonctions pour gérer les boutons dans le header
+window.addGroupsButton = function() {
+  console.log('🔧 Ajout du bouton groupes dans le header...');
+  // Le bouton est déjà dans le menu admin, pas besoin d'ajouter dans le header
+};
+
+window.removeGroupsButton = function() {
+  console.log('🗑️ Suppression du bouton groupes du header...');
+  // Pas de bouton à supprimer du header
+};
+
+// Fonction de toast pour compatibilité
+function showToast(message, type = 'info', duration = 3000) {
+  const toast = document.createElement('div');
+  const colors = {
+    success: 'bg-green-500',
+    error: 'bg-red-500',
+    warning: 'bg-yellow-500',
+    info: 'bg-blue-500'
+  };
+  
+  toast.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50`;
+  toast.innerHTML = `
+    <div class="flex items-center gap-2">
+      <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i>
+      <span>${message}</span>
+    </div>
+  `;
+  
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), duration);
+}
+
+// Initialisation au chargement du DOM
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('🚀 BASE 10 REMIX - Initialisation du module groupes...');
+  
+  // Vérifier que le module est bien chargé
+  setTimeout(() => {
+    if (typeof GroupsModuleComplete !== 'undefined') {
+      console.log('✅ GroupsModuleComplete est disponible');
+    } else {
+      console.warn('⚠️ GroupsModuleComplete n\'est pas disponible');
+    }
+  }, 1000);
+});
 </script>
 
 </body>
