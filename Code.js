@@ -19,6 +19,10 @@ function onOpen() {
     .addItem('👥 Groupes de Besoin', 'showGroupsModule')
     .addItem('🚀 Groupes BASE 10', 'showGroupsModuleV10')
     .addSeparator()
+    .addSubMenu(ui.createMenu('👥 Groupes V4 (NOUVEAU)')
+      .addItem('✨ Créer les Groupes', 'openGroupsModuleV4Creator')
+      .addItem('🔧 Gérer les Groupes', 'openGroupsModuleV4Manager'))
+    .addSeparator()
     .addItem('📄 Finalisation & Export', 'showFinalisationUI')
     .addSeparator()
     .addItem('🔧 Paramètres Avancés', 'showAdvancedSettings')
@@ -40,6 +44,102 @@ function onOpen() {
     .addSeparator()
     .addItem('📊 Voir Résultats TEST', 'legacy_viewTestResults')
     .addToUi();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MODULEGROUPV4 - OUVERTURE
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Ouvre ModuleGroupV4 en mode Créateur
+ */
+function openGroupsModuleV4Creator() {
+  try {
+    // Créer HTML minimal avec juste le module V4
+    const html = HtmlService.createHtmlOutput(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+      </head>
+      <body class="bg-gray-50">
+        <div class="groups-module-container w-full h-screen"></div>
+        
+        <script src="ModuleGroupV4.html"></script>
+        <script src="groupsAlgorithmV4.js"></script>
+        <script src="groupsSwapV4.js"></script>
+        
+        <script>
+          document.addEventListener('DOMContentLoaded', function() {
+            if (window.ModuleGroupV4) {
+              window.ModuleGroupV4.init();
+              window.ModuleGroupV4.open('creator');
+              console.log('✅ ModuleGroupV4 Creator ouvert');
+            } else {
+              console.error('❌ ModuleGroupV4 non disponible');
+            }
+          });
+        </script>
+      </body>
+      </html>
+    `)
+    .setWidth(1400)
+    .setHeight(900);
+    
+    const ui = SpreadsheetApp.getUi();
+    ui.showModelessDialog(html, '✨ Créer les Groupes - ModuleGroupV4');
+  } catch (error) {
+    console.error('❌ Erreur ouverture ModuleGroupV4 Creator:', error);
+    SpreadsheetApp.getUi().alert('Erreur: ' + error.message);
+  }
+}
+
+/**
+ * Ouvre ModuleGroupV4 en mode Manager
+ */
+function openGroupsModuleV4Manager() {
+  try {
+    // Créer HTML minimal avec juste le module V4
+    const html = HtmlService.createHtmlOutput(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+      </head>
+      <body class="bg-gray-50">
+        <div class="groups-module-container w-full h-screen"></div>
+        
+        <script src="ModuleGroupV4.html"></script>
+        <script src="groupsAlgorithmV4.js"></script>
+        <script src="groupsSwapV4.js"></script>
+        
+        <script>
+          document.addEventListener('DOMContentLoaded', function() {
+            if (window.ModuleGroupV4) {
+              window.ModuleGroupV4.init();
+              window.ModuleGroupV4.open('manager');
+              console.log('✅ ModuleGroupV4 Manager ouvert');
+            } else {
+              console.error('❌ ModuleGroupV4 non disponible');
+            }
+          });
+        </script>
+      </body>
+      </html>
+    `)
+    .setWidth(1400)
+    .setHeight(900);
+    
+    const ui = SpreadsheetApp.getUi();
+    ui.showModelessDialog(html, '🔧 Gérer les Groupes - ModuleGroupV4');
+  } catch (error) {
+    console.error('❌ Erreur ouverture ModuleGroupV4 Manager:', error);
+    SpreadsheetApp.getUi().alert('Erreur: ' + error.message);
+  }
 }
 
 /**
@@ -3099,4 +3199,301 @@ function getBase10Statistics() {
     console.error('❌ Erreur getBase10Statistics:', error);
     return { success: false, error: error.message };
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MODULE GROUPES V4 - HANDLER PRINCIPAL
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Handler principal pour toutes les requêtes du ModuleGroupV4
+ * Câble les 3 fichiers: ModuleGroupV4.html, groupsAlgorithmV4.js, groupsSwapV4.js
+ */
+function handleGroupsModuleRequest(payload) {
+  try {
+    if (!payload || !payload.action) {
+      return { success: false, error: 'Payload invalide' };
+    }
+
+    console.log(`📋 handleGroupsModuleRequest - Action: ${payload.action}`);
+
+    switch (payload.action) {
+      case 'loadClassesData':
+        return loadClassesDataForGroups(payload.classes);
+
+      case 'generateGroups':
+        return generateGroupsV4(payload);
+
+      case 'saveTempGroups':
+        return saveTempGroupsV4(payload);
+
+      case 'finalizeTempGroups':
+        return finalizeTempGroupsV4(payload);
+
+      default:
+        return { success: false, error: `Action inconnue: ${payload.action}` };
+    }
+  } catch (error) {
+    console.error('❌ Erreur handleGroupsModuleRequest:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CHARGER DONNÉES CLASSES
+// ═══════════════════════════════════════════════════════════════
+
+function loadClassesDataForGroups(classes) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const classesData = {};
+    const classKeyMap = {};
+
+    if (!classes || classes.length === 0) {
+      return { success: false, error: 'Aucune classe spécifiée' };
+    }
+
+    classes.forEach(className => {
+      // Chercher feuille FIN ou INT
+      const sheetFIN = ss.getSheetByName(className + 'FIN');
+      const sheetINT = ss.getSheetByName(className + 'INT');
+      const sheet = sheetFIN || sheetINT;
+
+      if (!sheet) {
+        console.warn(`⚠️ Feuille ${className} non trouvée`);
+        return;
+      }
+
+      const data = sheet.getDataRange().getValues();
+      const headers = data[0];
+      const eleves = [];
+
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        const student = {};
+
+        headers.forEach((header, idx) => {
+          student[header] = row[idx];
+        });
+
+        if (student.NOM || student.nom) {
+          eleves.push(student);
+        }
+      }
+
+      const key = sheetFIN ? className + 'FIN' : className + 'INT';
+      classesData[key] = { eleves, sheetName: sheet.getName() };
+      classKeyMap[className] = key;
+
+      console.log(`✅ ${className}: ${eleves.length} élèves chargés`);
+    });
+
+    return {
+      success: true,
+      classesData,
+      classKeyMap,
+      totalStudents: Object.values(classesData).reduce((sum, c) => sum + c.eleves.length, 0)
+    };
+  } catch (error) {
+    console.error('❌ Erreur loadClassesDataForGroups:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  GÉNÉRER GROUPES (Appelle groupsAlgorithmV4.js)
+// ═══════════════════════════════════════════════════════════════
+
+function generateGroupsV4(payload) {
+  try {
+    if (!payload.students || !Array.isArray(payload.students)) {
+      return { success: false, error: 'Élèves invalides' };
+    }
+
+    const groupCount = payload.groupCount || 3;
+    const distributionMode = payload.distributionMode || 'heterogeneous';
+    const groupType = payload.groupType || 'needs';
+
+    console.log(`📊 Génération: ${payload.students.length} élèves, ${groupCount} groupes, mode: ${distributionMode}`);
+
+    // Appeler algorithme (défini dans groupsAlgorithmV4.js)
+    // NOTE: Cette fonction est définie dans groupsAlgorithmV4.js et disponible globalement
+    const result = generateGroups(payload.students, groupCount, distributionMode, groupType);
+
+    if (!result.success) {
+      return result;
+    }
+
+    console.log(`✅ ${result.groups.length} groupes générés`);
+
+    return {
+      success: true,
+      groups: result.groups,
+      totalStudents: result.totalStudents,
+      timestamp: result.timestamp
+    };
+  } catch (error) {
+    console.error('❌ Erreur generateGroupsV4:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SAUVEGARDER TEMP (Refactorisé pour regroupementId)
+// ═══════════════════════════════════════════════════════════════
+
+function saveTempGroupsV4(payload) {
+  try {
+    if (!payload || !Array.isArray(payload.groups)) {
+      return { success: false, error: 'Payload invalide' };
+    }
+
+    const typePrefix = getGroupTypePrefix_(payload.type);
+    const regroupementId = payload.regroupementId || 'default';
+    const regroupementSuffix = extractRegroupementSuffix_(regroupementId);
+    const sheetPrefix = typePrefix + regroupementSuffix;
+
+    console.log(`💾 saveTempGroupsV4 - Regroupement: ${regroupementId}, Prefix: ${sheetPrefix}`);
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const results = [];
+    let offsetStart = payload.offsetStart || 1;
+
+    // Supprimer anciens TEMP sheets pour ce regroupement
+    const sheets = ss.getSheets();
+    const tempSheets = sheets.filter(sh => sh.getName().startsWith(sheetPrefix) && sh.getName().endsWith('TEMP'));
+    tempSheets.forEach(sh => ss.deleteSheet(sh));
+
+    // Créer nouveaux TEMP sheets
+    payload.groups.forEach((group, idx) => {
+      const currentIndex = offsetStart + idx;
+      const tempGroupName = sheetPrefix + currentIndex + 'TEMP';
+
+      console.log(`   👥 ${tempGroupName}: ${group.students?.length || 0} élèves`);
+
+      const result = saveGroup(tempGroupName, group.students || [], { isFullData: true, index: currentIndex });
+
+      if (!result.success) {
+        return { success: false, error: `Erreur création ${tempGroupName}` };
+      }
+
+      results.push({
+        tempGroupName,
+        index: currentIndex,
+        studentCount: group.students?.length || 0
+      });
+
+      // Masquer sheet
+      const sh = ss.getSheetByName(tempGroupName);
+      if (sh) sh.hideSheet();
+    });
+
+    // Stocker metadata
+    const metadataKey = `GROUPING_${typePrefix}_${regroupementId}_metadata`;
+    const metadata = {
+      regroupementId,
+      label: payload.regroupement?.label || 'Regroupement',
+      classes: payload.regroupement?.classes || [],
+      lastTempIndex: offsetStart + payload.groups.length - 1,
+      lastTempRange: { start: offsetStart, end: offsetStart + payload.groups.length - 1 },
+      lastPersistMode: payload.persistMode || 'replace',
+      timestamp: new Date().toISOString()
+    };
+
+    PropertiesService.getUserProperties().setProperty(metadataKey, JSON.stringify(metadata));
+
+    console.log(`✅ ${results.length} groupes sauvegardés en TEMP`);
+
+    return {
+      success: true,
+      tempSheets: results.map(r => r.tempGroupName),
+      offsetRange: { start: offsetStart, end: offsetStart + payload.groups.length - 1 },
+      totalGroups: results.length,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('❌ Erreur saveTempGroupsV4:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FINALISER GROUPES (Refactorisé pour regroupementId)
+// ═══════════════════════════════════════════════════════════════
+
+function finalizeTempGroupsV4(payload) {
+  try {
+    const typePrefix = getGroupTypePrefix_(payload.type);
+    const regroupementId = payload.regroupementId || 'default';
+    const regroupementSuffix = extractRegroupementSuffix_(regroupementId);
+    const sheetPrefix = typePrefix + regroupementSuffix;
+
+    console.log(`✅ finalizeTempGroupsV4 - Regroupement: ${regroupementId}`);
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheets = ss.getSheets();
+
+    // Trouver TOUS les TEMP sheets pour ce regroupement
+    const tempSheets = sheets.filter(sh => {
+      const name = sh.getName();
+      return name.startsWith(sheetPrefix) && name.endsWith('TEMP');
+    });
+
+    console.log(`   Sheets TEMP trouvés: ${tempSheets.map(s => s.getName()).join(', ')}`);
+
+    const results = [];
+
+    // Renommer chaque TEMP sheet
+    tempSheets.forEach(tempSheet => {
+      const tempName = tempSheet.getName();
+      const finalName = tempName.replace(/TEMP$/, '');
+
+      tempSheet.setName(finalName);
+      results.push({ from: tempName, to: finalName });
+
+      console.log(`   🔄 ${tempName} → ${finalName}`);
+    });
+
+    // Mettre à jour metadata
+    const metadataKey = `GROUPING_${typePrefix}_${regroupementId}_metadata`;
+    const metadata = JSON.parse(PropertiesService.getUserProperties().getProperty(metadataKey) || '{}');
+    metadata.lastFinalRange = metadata.lastTempRange;
+    metadata.lastFinalIndex = metadata.lastTempIndex;
+    metadata.lastFinalizedAt = new Date().toISOString();
+
+    PropertiesService.getUserProperties().setProperty(metadataKey, JSON.stringify(metadata));
+
+    console.log(`✅ Finalization complétée: ${results.length} sheets renommés`);
+
+    return {
+      success: true,
+      finalizedSheets: results,
+      totalSheets: results.length,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('❌ Erreur finalizeTempGroupsV4:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+function extractRegroupementSuffix_(regroupementId) {
+  // 'reg_1' → 'A', 'reg_2' → 'B', etc.
+  if (!regroupementId || regroupementId === 'default') return '';
+
+  const index = parseInt(regroupementId.split('_')[1]) || 0;
+  return String.fromCharCode(65 + index);  // 0 → A, 1 → B, etc.
+}
+
+function getGroupTypePrefix_(type) {
+  const prefixes = {
+    needs: 'grBe',
+    language: 'grLv',
+    option: 'grOp'
+  };
+  return prefixes[type] || 'grBe';
 }

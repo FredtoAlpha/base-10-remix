@@ -1105,6 +1105,23 @@
   </div>
 </div>
 
+<!-- Modale ModuleGroupV4 -->
+<div id="moduleGroupV4Modal" class="fixed inset-0 z-[110000] flex items-center justify-center bg-black/50 backdrop-blur-sm hidden transition-opacity duration-300" role="dialog" aria-modal="true" aria-labelledby="modulegroupv4-modal-title">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full h-full max-h-[95vh] max-w-[95vw] p-0 transform transition-all duration-300" id="moduleGroupV4Content">
+    <!-- Header -->
+    <div class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-indigo-600 to-purple-600">
+      <h2 id="modulegroupv4-modal-title" class="text-xl font-bold text-white">Gestion des Groupes</h2>
+      <button onclick="closeModuleGroupV4Modal()" class="text-white hover:bg-white/20 p-2 rounded-lg transition-colors">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <!-- Contenu du module (sera rempli par JS) -->
+    <div class="groups-module-container w-full h-full overflow-auto" style="height: calc(100% - 70px);">
+      <!-- Le contenu sera injecté ici par ModuleGroupV4 -->
+    </div>
+  </div>
+</div>
+
 <!-- Panneau #lisibilite-panel SUPPRIMÉ - On utilise maintenant le menu dropdown #dropdownRegler -->
 
 <!-- TEMPLATES - À PLACER JUSTE AVANT LA FIN DU BODY -->
@@ -1292,8 +1309,9 @@
   <!-- 1. CHARGER LES MODULES DE BASE EN PREMIER (Config, State, Utils, Toast, Spinner) -->
   <?!= include('InterfaceV2_Modules_Loader'); ?>
 
-  <!-- 1.5. CHARGER LE MODULE GROUPES AVANT CORESCRIPT (pour que openGroupsInterface() le trouve) -->
+  <!-- 1.5. CHARGER LES MODULES GROUPES AVANT CORESCRIPT -->
   <?!= include('groupsModuleComplete'); ?>
+  <?!= include('ModuleGroupV4'); ?>
 
   <!-- 2. CHARGER LE SCRIPT PRINCIPAL (qui dépend des modules de base) -->
   <?!= include('InterfaceV2_CoreScript'); ?>
@@ -1831,8 +1849,9 @@
 </div>
 <!-- FIN Menu Admin -->
 
-<!-- ========== MODULE GROUPES INCLUS À LA LIGNE 1296 ========== -->
-  <?!= include('InterfaceV2_GroupsScript'); ?>
+<!-- ========== MODULE GROUPES SUPPRIMÉ - Utilisez le menu Admin à la place ========== -->
+<!-- SUPPRIMÉ: InterfaceV2_GroupsScript.html crée un bouton dans le header qui n'est pas voulu -->
+<!-- Utilisez plutôt le menu Admin > Groupes pour accéder à ModuleGroupV4 -->
 
 <!-- ============================================================ -->
 <!-- TOOLTIPS SYSTEM -->
@@ -3476,91 +3495,20 @@ const Base10UI = {
 // ═══════════════════════════════════════════════════════════════
 //  INTÉGRATION MODULE GROUPES DANS INTERFACEV2
 // ═══════════════════════════════════════════════════════════════
+// ❌ ANCIEN SYSTÈME - SUPPRIMÉ
+// ✅ UTILISER: openGroupsModuleV4Creator() ou openGroupsModuleV4Manager()
+// ═══════════════════════════════════════════════════════════════
 
-// Fonction principale d'ouverture de l'interface groupes
+// Fonction OBSOLÈTE - Ne rien faire
 function openGroupsInterface(mode = 'creator') {
-  console.log(`🚀 Ouverture de l'interface des groupes (mode: ${mode})...`);
-
-  // 🔑 Vérifier si le module GroupsModuleComplete est disponible
-  // Si non disponible, attendre 500ms puis retenter (une seule fois)
-  const tryOpenGroups = () => {
-    if (typeof window.GroupsModuleComplete !== 'undefined' && window.GroupsModuleComplete) {
-      try {
-        console.log('✅ GroupsModuleComplete trouvé, initialisation...');
-
-        // Initialiser et ouvrir le module
-        if (typeof window.GroupsModuleComplete.init === 'function') {
-          window.GroupsModuleComplete.init();
-        }
-
-        // Configurer le mode
-        if (typeof window.GroupsModuleComplete.setState === 'function') {
-          if (mode === 'manager') {
-            window.GroupsModuleComplete.setState({ mode: 'manager' });
-          } else {
-            window.GroupsModuleComplete.setState({ mode: 'creator' });
-          }
-        }
-
-        // Ouvrir l'interface
-        if (typeof window.GroupsModuleComplete.open === 'function') {
-          window.GroupsModuleComplete.open();
-          console.log('✅ GroupsModuleComplete ouvert avec succès');
-          return true;
-        }
-      } catch (error) {
-        console.error('❌ Erreur lors de l\'ouverture de GroupsModuleComplete:', error);
-      }
-    }
-
-    return false;
-  };
-
-  // 1ère tentative immédiate
-  if (tryOpenGroups()) {
-    return;
-  }
-
-  // 2ème tentative après 500ms (le module peut encore se charger)
-  console.warn('⚠️ GroupsModuleComplete pas encore disponible, nouvelle tentative dans 500ms...');
-  setTimeout(() => {
-    if (!tryOpenGroups()) {
-      console.warn('⚠️ GroupsModuleComplete toujours non disponible, fallback vers interface popup...');
-      openGroupsPopup(mode);
-    }
-  }, 500);
+  console.error('❌ openGroupsInterface est OBSOLÈTE!');
+  console.error('✅ Utilisez openGroupsModuleV4Creator() ou openGroupsModuleV4Manager()');
+  showToast('Utilisez le menu Admin → Groupes V4 (NOUVEAU)', 'warning');
 }
 
-// Fallback vers l'ancienne interface popup
+// Fonction OBSOLÈTE - Ne rien faire
 function openGroupsPopup(mode) {
-  console.log(`🔄 Ouverture de l'interface popup fallback (mode: ${mode})`);
-  
-  // Créer une popup simple en attendant
-  const popup = document.createElement('div');
-  popup.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-  popup.innerHTML = `
-    <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-      <h3 class="text-xl font-bold mb-4">Interface Groupes</h3>
-      <p class="text-gray-600 mb-4">Module GroupsModuleComplete en cours de chargement...</p>
-      <div class="flex justify-center">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-      <button onclick="this.closest('.fixed').remove()" class="mt-4 w-full bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded">
-        Fermer
-      </button>
-    </div>
-  `;
-  document.body.appendChild(popup);
-  
-  // Retenter après 2 secondes
-  setTimeout(() => {
-    popup.remove();
-    if (typeof GroupsModuleComplete !== 'undefined') {
-      openGroupsInterface(mode);
-    } else {
-      showToast('Module groupes non disponible', 'error');
-    }
-  }, 2000);
+  console.error('❌ openGroupsPopup est OBSOLÈTE!');
 }
 
 // Fonctions pour gérer les boutons dans le header
@@ -3596,20 +3544,61 @@ function showToast(message, type = 'info', duration = 3000) {
   setTimeout(() => toast.remove(), duration);
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  MODULE GROUPES V4 - NOUVEAU SYSTÈME
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Ouvrir le nouveau ModuleGroupV4
+ */
+function openModuleGroupV4(mode = 'creator') {
+  console.log(`🚀 Ouverture ModuleGroupV4 (mode: ${mode})...`);
+
+  if (typeof window.ModuleGroupV4 !== 'undefined' && window.ModuleGroupV4) {
+    try {
+      // Initialiser le module
+      if (typeof window.ModuleGroupV4.init === 'function') {
+        window.ModuleGroupV4.init();
+      }
+
+      // Ouvrir avec le mode spécifié
+      window.ModuleGroupV4.open(mode);
+      console.log('✅ ModuleGroupV4 ouvert avec succès');
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur ouverture ModuleGroupV4:', error);
+    }
+  }
+
+  console.warn('⚠️ ModuleGroupV4 non disponible');
+  return false;
+}
+
 // Initialisation au chargement du DOM
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('🚀 BASE 10 REMIX - Initialisation du module groupes...');
+  console.log('🚀 BASE 10 REMIX - Initialisation des modules...');
   
-  // Vérifier que le module est bien chargé
+  // Vérifier que ModuleGroupV4 est bien chargé
   setTimeout(() => {
-    if (typeof GroupsModuleComplete !== 'undefined') {
-      console.log('✅ GroupsModuleComplete est disponible');
+    if (typeof ModuleGroupV4 !== 'undefined') {
+      console.log('✅ ModuleGroupV4 est disponible');
     } else {
-      console.warn('⚠️ GroupsModuleComplete n\'est pas disponible');
+      console.warn('⚠️ ModuleGroupV4 n\'est pas disponible');
     }
   }, 1000);
 });
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODULE GROUPES V4 - IMPORTS (NOUVEAU SYSTÈME) -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 
+  ❌ ANCIEN MODULE SUPPRIMÉ
+  ✅ NOUVEAU MODULE: ModuleGroupV4
+  
+  Les imports sont chargés UNIQUEMENT quand le module est ouvert
+  depuis le menu Admin (openGroupsModuleV4Creator/Manager)
+-->
 
 </body>
 </html>

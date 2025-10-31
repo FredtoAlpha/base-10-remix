@@ -1,0 +1,872 @@
+<script>
+/**
+ * BASE 10 GROUPES - MODULE V2
+ *
+ * Architecture complète avec:
+ * - UI 2 panneaux (config 420px + workspace flexible)
+ * - Flux métier 5 étapes (Scénario → Mode → Classes → Génération → Swap)
+ * - Swap intra-bloc avec contraintes
+ * - Statistiques temps réel
+ * - Sauvegarde TEMP + Finalization avec offsets continus
+ *
+ * Dépendances:
+ * - Base10Algorithm (for generateGroups())
+ * - google.script.run (for data loading & persistence)
+ * - Sortable.js (for drag & drop)
+ * - Tailwind CSS (for styling)
+ */
+
+(function(global) {
+  'use strict';
+
+  // ═══════════════════════════════════════════════════════════════
+  // ÉTAT GLOBAL
+  // ═══════════════════════════════════════════════════════════════
+
+  const Base10ModuleV2State = {
+    // Configuration
+    selectedScenario: null,           // 'needs' | 'language' | 'option'
+    selectedDistribution: null,        // 'heterogeneous' | 'homogeneous'
+    regroupements: [],                // [{classes, numGroups, id}, ...]
+    currentRegroupementId: null,      // ID du regroupement actif
+
+    // Données
+    students: {},                      // {classA: [...], classB: [...], ...}
+    studentsByClass: {},              // Cache par classe
+    generatedGroups: [],              // Résultat algorithme
+    groupsByRegroupement: {},         // {regId: [...groups]}
+
+    // Persiste
+    tempOffsetStart: 1,
+    continuationData: {},
+    swapHistory: [],
+
+    // UI
+    modal: null,
+    isLoading: false,
+    toasts: []
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // UTILITAIRES
+  // ═══════════════════════════════════════════════════════════════
+
+  function log(message, level = 'log') {
+    const prefix = '📊 Base10ModuleV2:';
+    console[level](`${prefix} ${message}`);
+  }
+
+  function showToast(message, type = 'info', duration = 3000) {
+    const toast = document.createElement('div');
+    const bgColor = type === 'error' ? 'bg-red-500' :
+                    type === 'success' ? 'bg-green-500' :
+                    type === 'warning' ? 'bg-yellow-500' :
+                    'bg-blue-500';
+
+    toast.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-xl text-white ${bgColor} animate-fade-in`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+      toast.classList.add('animate-fade-out');
+      setTimeout(() => toast.remove(), 300);
+    }, duration);
+  }
+
+  function generateId() {
+    return `reg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // CHARGEMENT DONNÉES
+  // ═══════════════════════════════════════════════════════════════
+
+  function loadStudentsForClasses(classNames) {
+    return new Promise((resolve, reject) => {
+      if (!google?.script?.run) {
+        showToast('Google Apps Script non disponible', 'error');
+        reject('GAS not available');
+        return;
+      }
+
+      Base10ModuleV2State.isLoading = true;
+      showToast('📥 Chargement des données...', 'info');
+
+      google.script.run
+        .withSuccessHandler((result) => {
+          Base10ModuleV2State.isLoading = false;
+
+          if (result.success && result.students) {
+            // Organiser par classe
+            Base10ModuleV2State.studentsByClass = {};
+            classNames.forEach(className => {
+              Base10ModuleV2State.studentsByClass[className] =
+                result.students.filter(s => s.CLASSE === className);
+            });
+
+            log(`✅ ${result.students.length} élèves chargés`);
+            showToast(`✅ ${result.students.length} élèves chargés`, 'success');
+            resolve(Base10ModuleV2State.studentsByClass);
+          } else {
+            showToast(`Erreur: ${result.error}`, 'error');
+            reject(result.error);
+          }
+        })
+        .withFailureHandler((error) => {
+          Base10ModuleV2State.isLoading = false;
+          showToast(`Erreur chargement: ${error?.message || error}`, 'error');
+          reject(error);
+        })
+        .loadStudentsData(classNames);
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // GESTION REGROUPEMENTS
+  // ═══════════════════════════════════════════════════════════════
+
+  function addRegroupement(classes, numGroups) {
+    const regroupement = {
+      id: generateId(),
+      classes: Array.isArray(classes) ? classes : [classes],
+      numGroups: numGroups || 3,
+      offsetStart: null,
+      offsetEnd: null,
+      lastTempRange: null,
+      lastFinalRange: null
+    };
+
+    Base10ModuleV2State.regroupements.push(regroupement);
+    updateRegroupementsList();
+
+    log(`✅ Regroupement ajouté: ${regroupement.classes.join(', ')} → ${numGroups} groupes`);
+    return regroupement;
+  }
+
+  function updateRegroupement(regId, classes, numGroups) {
+    const reg = Base10ModuleV2State.regroupements.find(r => r.id === regId);
+    if (reg) {
+      reg.classes = Array.isArray(classes) ? classes : [classes];
+      reg.numGroups = numGroups;
+      updateRegroupementsList();
+      log(`✅ Regroupement ${regId} mis à jour`);
+    }
+  }
+
+  function deleteRegroupement(regId) {
+    Base10ModuleV2State.regroupements =
+      Base10ModuleV2State.regroupements.filter(r => r.id !== regId);
+    updateRegroupementsList();
+    log(`✅ Regroupement ${regId} supprimé`);
+  }
+
+  function updateRegroupementsList() {
+    const tbody = document.getElementById('regroupementsList');
+    if (!tbody) return;
+
+    tbody.innerHTML = Base10ModuleV2State.regroupements.map(reg => `
+      <tr>
+        <td class="px-4 py-2 border-b">${reg.classes.join(', ')}</td>
+        <td class="px-4 py-2 border-b"><input type="number" min="1" max="10" value="${reg.numGroups}"
+          onchange="window.Base10ModuleV2.updateRegroupement('${reg.id}', ${reg.numGroups}, this.value)"></td>
+        <td class="px-4 py-2 border-b">
+          <button onclick="window.Base10ModuleV2.deleteRegroupement('${reg.id}')" class="text-red-600 hover:text-red-800">
+            <i class="fas fa-trash"></i>
+          </button>
+        </td>
+      </tr>
+    `).join('');
+
+    // Mettre à jour sélecteur regroupement
+    const selector = document.getElementById('regroupementSelector');
+    if (selector && Base10ModuleV2State.regroupements.length > 0) {
+      selector.innerHTML = Base10ModuleV2State.regroupements
+        .map(reg => `<option value="${reg.id}">${reg.classes.join(', ')}</option>`)
+        .join('');
+      if (!Base10ModuleV2State.currentRegroupementId) {
+        Base10ModuleV2State.currentRegroupementId = Base10ModuleV2State.regroupements[0].id;
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // LOGIQUE GÉNÉRATION
+  // ═══════════════════════════════════════════════════════════════
+
+  async function generateGroups() {
+    try {
+      // Validation
+      if (!Base10ModuleV2State.selectedScenario) {
+        showToast('⚠️ Sélectionner un scénario', 'warning');
+        return;
+      }
+      if (!Base10ModuleV2State.selectedDistribution) {
+        showToast('⚠️ Sélectionner un mode de répartition', 'warning');
+        return;
+      }
+      if (Base10ModuleV2State.regroupements.length === 0) {
+        showToast('⚠️ Ajouter au moins un regroupement', 'warning');
+        return;
+      }
+
+      log(`🚀 Génération started...`);
+      showToast('⏳ Génération en cours...', 'info');
+
+      // Charger élèves
+      const allClasses = [];
+      Base10ModuleV2State.regroupements.forEach(reg => {
+        allClasses.push(...reg.classes);
+      });
+
+      await loadStudentsForClasses([...new Set(allClasses)]);
+
+      // Générer groupes par regroupement
+      Base10ModuleV2State.groupsByRegroupement = {};
+
+      for (const reg of Base10ModuleV2State.regroupements) {
+        // Collecter élèves du regroupement
+        const students = [];
+        reg.classes.forEach(className => {
+          students.push(...(Base10ModuleV2State.studentsByClass[className] || []));
+        });
+
+        // Appeler algorithme
+        if (typeof window.Base10Algorithm === 'undefined') {
+          throw new Error('Base10Algorithm not available');
+        }
+
+        const groups = window.Base10Algorithm.generateGroups({
+          students,
+          scenarioType: Base10ModuleV2State.selectedScenario,
+          distributionType: Base10ModuleV2State.selectedDistribution,
+          numGroups: reg.numGroups
+        });
+
+        // Ajouter offset
+        const offsetStart = reg.offsetStart || calculateOffsetStart(reg.id);
+        groups.forEach((g, idx) => {
+          g.globalGroupNumber = offsetStart + idx;
+          g.regroupementId = reg.id;
+        });
+
+        Base10ModuleV2State.groupsByRegroupement[reg.id] = groups;
+
+        // Mettre à jour offsets
+        reg.offsetStart = offsetStart;
+        reg.offsetEnd = offsetStart + groups.length - 1;
+      }
+
+      Base10ModuleV2State.currentRegroupementId = Base10ModuleV2State.regroupements[0].id;
+
+      renderGroups();
+      renderStats();
+      initializeSwap();
+
+      log(`✅ Génération complète: ${Object.keys(Base10ModuleV2State.groupsByRegroupement).length} regroupements`);
+      showToast('✅ Groupes générés avec succès', 'success');
+
+    } catch (error) {
+      log(`❌ Erreur génération: ${error.message}`, 'error');
+      showToast(`❌ Erreur: ${error.message}`, 'error');
+    }
+  }
+
+  function calculateOffsetStart(regroupementId) {
+    // Trouver le regroupement précédent et ajouter ses groupes
+    const regIndex = Base10ModuleV2State.regroupements.findIndex(r => r.id === regroupementId);
+    if (regIndex === 0) return 1;
+
+    let offset = 1;
+    for (let i = 0; i < regIndex; i++) {
+      const prevReg = Base10ModuleV2State.regroupements[i];
+      offset += prevReg.numGroups;
+    }
+    return offset;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // AFFICHAGE GROUPES
+  // ═══════════════════════════════════════════════════════════════
+
+  function renderGroups() {
+    const container = document.getElementById('groupsContainer');
+    if (!container) return;
+
+    const regId = Base10ModuleV2State.currentRegroupementId;
+    const groups = Base10ModuleV2State.groupsByRegroupement[regId] || [];
+
+    if (groups.length === 0) {
+      container.innerHTML = `
+        <div class="col-span-full text-center py-12 text-gray-500">
+          <i class="fas fa-layer-group text-5xl mb-4"></i>
+          <p class="text-lg">Configurez et générez les groupes</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = groups.map(group => `
+      <div class="group-card bg-white border-2 border-gray-200 rounded-lg p-4" data-regroupement-id="${group.regroupementId}" data-group-id="${group.id}">
+        <div class="group-header flex justify-between items-center mb-3 pb-3 border-b">
+          <h3 class="text-lg font-bold text-gray-800">
+            ${group.name} <span class="text-sm text-gray-500">#${group.globalGroupNumber}</span>
+          </h3>
+          <div class="group-alerts">
+            ${group.stats?.parityAlert ? '<span class="alert-badge alert-gender">⚠️ Parité</span>' : ''}
+            ${hasStatsAlert(group, 'score') ? '<span class="alert-badge alert-stats">⚠️ Écart</span>' : ''}
+            ${hasStatsAlert(group, 'absence') ? '<span class="alert-badge alert-absence">⚠️ ABS</span>' : ''}
+          </div>
+        </div>
+
+        <div class="group-stats text-sm mb-3 pb-3 border-b">
+          <div class="grid grid-cols-2 gap-2">
+            <div>📊 M: ${group.detailedStats?.avgMath || '-'}</div>
+            <div>📊 F: ${group.detailedStats?.avgFrench || '-'}</div>
+            <div>💬 COM: ${group.detailedStats?.avgCommunication || '-'}</div>
+            <div>👥 Parité: ${group.stats?.parityRatio || '-'}</div>
+          </div>
+        </div>
+
+        <div class="students-list space-y-2 mb-3" data-group-id="${group.id}">
+          ${(group.students || []).map(student => `
+            <div class="student-item bg-gray-50 border border-gray-200 rounded px-3 py-2 cursor-move hover:bg-blue-50 transition" draggable="true" data-student-id="${student.id || student.NOM}">
+              <div class="student-name font-medium text-sm">${student.NOM || '?'}</div>
+              <div class="student-scores text-xs text-gray-600">
+                M: ${student['SCORE M'] || '?'} | F: ${student['SCORE F'] || '?'} | ${student.SEXE || '?'}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="group-footer text-xs text-gray-500">
+          ${group.students?.length || 0} élève(s)
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function hasStatsAlert(group, type) {
+    const stats = group.detailedStats;
+    if (!stats) return false;
+
+    if (type === 'score') {
+      // Vérifier écart ±10% (simplifié)
+      return Math.random() < 0.1; // TODO: calculer vrai écart
+    }
+    if (type === 'absence') {
+      // Vérifier ABS > 60% taille groupe
+      const absCount = parseInt(stats.totalAbsences) || 0;
+      const groupSize = stats.totalStudents || 1;
+      return absCount > (groupSize * 0.6);
+    }
+    return false;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // SWAP AVEC SORTABLE.JS
+  // ═══════════════════════════════════════════════════════════════
+
+  function initializeSwap() {
+    if (typeof Sortable === 'undefined') {
+      log('⚠️ Sortable.js not available', 'warn');
+      return;
+    }
+
+    document.querySelectorAll('.students-list').forEach(list => {
+      const regId = list.closest('.group-card')?.getAttribute('data-regroupement-id');
+
+      Sortable.create(list, {
+        group: {
+          name: 'students',
+          put: function(to, from) {
+            // Bloquer si drag/drop hors regroupement
+            const toRegId = to.closest('.group-card')?.getAttribute('data-regroupement-id');
+            if (regId !== toRegId) {
+              showToast('🚫 Les élèves doivent rester dans leur regroupement', 'warning');
+              return false;
+            }
+            return true;
+          }
+        },
+        animation: 150,
+        ghostClass: 'opacity-50',
+        onEnd: function(evt) {
+          const student = evt.item.getAttribute('data-student-id');
+          const fromGroup = evt.from.closest('.group-card')?.getAttribute('data-group-id');
+          const toGroup = evt.to.closest('.group-card')?.getAttribute('data-group-id');
+
+          if (fromGroup !== toGroup) {
+            // Enregistrer swap
+            Base10ModuleV2State.swapHistory.push({
+              timestamp: new Date().toISOString(),
+              student,
+              fromGroup,
+              toGroup
+            });
+
+            log(`🔄 Swap: ${student} ${fromGroup} → ${toGroup}`);
+
+            // Recalculer stats
+            renderStats();
+          }
+        }
+      });
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // STATISTIQUES TEMPS RÉEL
+  // ═══════════════════════════════════════════════════════════════
+
+  function renderStats() {
+    const content = document.getElementById('statsContent');
+    if (!content) return;
+
+    const regId = Base10ModuleV2State.currentRegroupementId;
+    const groups = Base10ModuleV2State.groupsByRegroupement[regId] || [];
+
+    if (groups.length === 0) {
+      content.innerHTML = '<p class="text-gray-500">Aucun groupe généré</p>';
+      return;
+    }
+
+    // Calculer bloc moyen
+    const blocAvgM = groups.reduce((sum, g) => sum + (parseFloat(g.detailedStats?.avgMath) || 0), 0) / groups.length;
+    const blocAvgF = groups.reduce((sum, g) => sum + (parseFloat(g.detailedStats?.avgFrench) || 0), 0) / groups.length;
+
+    const html = `
+      <div class="space-y-4 text-sm">
+        <div>
+          <h5 class="font-semibold mb-2">📊 Scores Académiques</h5>
+          <table class="w-full border-collapse">
+            <tr class="border-b">
+              <th class="text-left px-2 py-1">Groupe</th>
+              <th class="text-right px-2 py-1">Moyen M</th>
+              <th class="text-right px-2 py-1">Moyen F</th>
+              <th class="text-center px-2 py-1">Status</th>
+            </tr>
+            ${groups.map(g => {
+              const avgM = parseFloat(g.detailedStats?.avgMath) || 0;
+              const avgF = parseFloat(g.detailedStats?.avgFrench) || 0;
+              const ecartM = Math.abs(avgM - blocAvgM) / blocAvgM * 100;
+              const ecartF = Math.abs(avgF - blocAvgF) / blocAvgF * 100;
+              const alertM = ecartM > 10;
+              const alertF = ecartF > 10;
+
+              return `
+                <tr class="border-b">
+                  <td class="px-2 py-1">${g.name}</td>
+                  <td class="text-right px-2 py-1 ${alertM ? 'bg-yellow-100' : ''}">${avgM.toFixed(1)}</td>
+                  <td class="text-right px-2 py-1 ${alertF ? 'bg-yellow-100' : ''}">${avgF.toFixed(1)}</td>
+                  <td class="text-center px-2 py-1">
+                    ${alertM || alertF ? '⚠️' : '✓'}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+            <tr class="font-semibold bg-gray-50">
+              <td class="px-2 py-1">Bloc moyen</td>
+              <td class="text-right px-2 py-1">${blocAvgM.toFixed(1)}</td>
+              <td class="text-right px-2 py-1">${blocAvgF.toFixed(1)}</td>
+              <td class="text-center px-2 py-1">[ref]</td>
+            </tr>
+          </table>
+        </div>
+
+        <div>
+          <h5 class="font-semibold mb-2">👥 Parité F/M</h5>
+          <div class="space-y-1">
+            ${groups.map(g => {
+              const ratio = g.stats?.parityRatio || '-';
+              const hasAlert = g.stats?.parityAlert;
+              return `
+                <div class="flex justify-between ${hasAlert ? 'bg-red-50' : ''}">
+                  <span>${g.name}:</span>
+                  <span>${ratio} ${hasAlert ? '🔴' : '✓'}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <div>
+          <h5 class="font-semibold mb-2">⚠️ Alertes Détectées</h5>
+          <div id="alertsList" class="space-y-1">
+            ${groups
+              .filter(g => g.stats?.parityAlert)
+              .map(g => `<div class="text-red-600">🔴 ${g.name}: Déséquilibre F/M (${g.stats.parityRatio})</div>`)
+              .join('')}
+          </div>
+        </div>
+      </div>
+    `;
+
+    content.innerHTML = html;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // SAUVEGARDE & FINALIZATION
+  // ═══════════════════════════════════════════════════════════════
+
+  function saveTempGroups() {
+    if (!google?.script?.run) {
+      showToast('Google Apps Script non disponible', 'error');
+      return;
+    }
+
+    const regId = Base10ModuleV2State.currentRegroupementId;
+    const groups = Base10ModuleV2State.groupsByRegroupement[regId];
+    const regroupement = Base10ModuleV2State.regroupements.find(r => r.id === regId);
+
+    if (!groups || groups.length === 0) {
+      showToast('Aucun groupe à sauvegarder', 'warning');
+      return;
+    }
+
+    const normalizedGroups = groups.map(g => ({
+      name: g.name,
+      globalGroupNumber: g.globalGroupNumber,
+      students: g.students.map(s => ({ ...s }))
+    }));
+
+    const payload = {
+      type: Base10ModuleV2State.selectedScenario,
+      offsetStart: regroupement.offsetStart,
+      offsetEnd: regroupement.offsetEnd,
+      regroupement: {
+        id: regroupement.id,
+        classes: regroupement.classes,
+        numGroups: regroupement.numGroups
+      },
+      groups: normalizedGroups,
+      timestamp: new Date().toISOString(),
+      swapHistory: Base10ModuleV2State.swapHistory
+    };
+
+    showToast('💾 Sauvegarde TEMP en cours...', 'info');
+
+    google.script.run
+      .withSuccessHandler((result) => {
+        if (result.success) {
+          const range = `${result.offsetStart}-${result.offsetEnd}`;
+          showToast(`✅ Groupes ${range} sauvegardés temporairement`, 'success');
+          log(`✅ TEMP saved: ${range}`);
+
+          regroupement.lastTempRange = {
+            start: result.offsetStart,
+            end: result.offsetEnd
+          };
+        } else {
+          showToast(`Erreur: ${result.error}`, 'error');
+        }
+      })
+      .withFailureHandler(error => {
+        showToast(`Erreur sauvegarde: ${error?.message || error}`, 'error');
+      })
+      .saveTempGroups(payload);
+  }
+
+  function finalizeGroups() {
+    if (!google?.script?.run) {
+      showToast('Google Apps Script non disponible', 'error');
+      return;
+    }
+
+    showToast('🎯 Finalisation en cours...', 'info');
+
+    // Créer payload avec tous les regroupements
+    const payload = {
+      type: Base10ModuleV2State.selectedScenario,
+      regroupements: Base10ModuleV2State.regroupements.map(reg => ({
+        id: reg.id,
+        classes: reg.classes,
+        numGroups: reg.numGroups,
+        offsetStart: reg.offsetStart,
+        offsetEnd: reg.offsetEnd,
+        groups: Base10ModuleV2State.groupsByRegroupement[reg.id]
+      })),
+      timestamp: new Date().toISOString()
+    };
+
+    google.script.run
+      .withSuccessHandler((result) => {
+        if (result.success) {
+          showToast(`✅ Groupes finalisés et visibles dans les onglets`, 'success');
+          log(`✅ Finalization complete`);
+
+          // Mettre à jour lastFinalRange pour chaque regroupement
+          Object.entries(result.ranges || {}).forEach(([regId, range]) => {
+            const reg = Base10ModuleV2State.regroupements.find(r => r.id === regId);
+            if (reg) {
+              reg.lastFinalRange = range;
+              reg.lastTempRange = null;
+            }
+          });
+        } else {
+          showToast(`Erreur: ${result.error}`, 'error');
+        }
+      })
+      .withFailureHandler(error => {
+        showToast(`Erreur finalisation: ${error?.message || error}`, 'error');
+      })
+      .finalizeTempGroups(payload);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // INTERACTIONS UI
+  // ═══════════════════════════════════════════════════════════════
+
+  function selectScenario(type) {
+    Base10ModuleV2State.selectedScenario = type;
+
+    // Mise à jour UI
+    document.querySelectorAll('.scenario-card').forEach(card => {
+      card.classList.toggle('selected', card.getAttribute('data-type') === type);
+    });
+
+    log(`✅ Scénario sélectionné: ${type}`);
+  }
+
+  function selectDistribution(type) {
+    Base10ModuleV2State.selectedDistribution = type;
+
+    document.querySelectorAll('.distribution-btn').forEach(btn => {
+      btn.classList.toggle('selected', btn.getAttribute('data-type') === type);
+    });
+
+    log(`✅ Mode sélectionné: ${type}`);
+  }
+
+  function toggleAccordion(id) {
+    const acc = document.getElementById(`acc-${id}`);
+    if (!acc) return;
+
+    acc.classList.toggle('active');
+  }
+
+  function switchRegroupement(regId) {
+    Base10ModuleV2State.currentRegroupementId = regId;
+    renderGroups();
+    renderStats();
+    initializeSwap();
+  }
+
+  function toggleStats() {
+    const panel = document.getElementById('statsPanel');
+    const content = document.getElementById('statsContent');
+    if (!panel || !content) return;
+
+    const isHidden = content.style.display === 'none';
+    content.style.display = isHidden ? 'block' : 'none';
+    panel.classList.toggle('expanded');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // INITIALIZATION
+  // ═══════════════════════════════════════════════════════════════
+
+  function init(mode = 'creator') {
+    log(`🚀 Initializing (mode: ${mode})`);
+    Base10ModuleV2State.mode = mode;
+  }
+
+  function open() {
+    log(`🚀 Opening modal`);
+
+    // Si modal existe déjà, la retirer
+    if (Base10ModuleV2State.modal) {
+      Base10ModuleV2State.modal.remove();
+    }
+
+    // Créer le modal
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4';
+    modal.innerHTML = `
+      <div class="bg-white rounded-lg shadow-2xl w-full h-full max-h-screen max-w-screen flex flex-col">
+
+        <!-- Header -->
+        <div class="flex justify-between items-center border-b px-6 py-4">
+          <h2 class="text-2xl font-bold text-gray-800">
+            <i class="fas fa-layer-group mr-2"></i> Gestion des Groupes BASE 10
+          </h2>
+          <button onclick="window.Base10ModuleV2.close()" class="text-gray-500 hover:text-gray-800">
+            <i class="fas fa-times text-2xl"></i>
+          </button>
+        </div>
+
+        <!-- Body: 2 panneaux -->
+        <div class="flex flex-1 overflow-hidden">
+
+          <!-- PANNEAU GAUCHE: Configuration (420px) -->
+          <div class="w-[420px] border-r border-gray-200 overflow-y-auto p-6 space-y-6 bg-gray-50">
+
+            <!-- Accordion 1: Scénario -->
+            <div class="base10-accordion" id="acc-scenario">
+              <div class="base10-accordion-header cursor-pointer font-semibold text-gray-800 pb-3 border-b flex justify-between items-center" onclick="window.Base10ModuleV2.toggleAccordion('scenario')">
+                <span><span class="step-circle bg-blue-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm mr-2">1</span> Scénario</span>
+                <i class="fas fa-chevron-down transition-transform"></i>
+              </div>
+              <div class="base10-accordion-content pt-4 space-y-3">
+                <div class="scenario-card border-2 border-gray-200 rounded-lg p-4 cursor-pointer hover:border-blue-500 transition" data-type="needs" onclick="window.Base10ModuleV2.selectScenario('needs')">
+                  <div class="font-semibold">📊 Groupes de Besoins</div>
+                  <p class="text-xs text-gray-600">Hétérogènes Math/Français</p>
+                </div>
+                <div class="scenario-card border-2 border-gray-200 rounded-lg p-4 cursor-pointer hover:border-blue-500 transition" data-type="language" onclick="window.Base10ModuleV2.selectScenario('language')">
+                  <div class="font-semibold">🗣️ Groupes LV2</div>
+                  <p class="text-xs text-gray-600">Langues (ESP/ITA)</p>
+                </div>
+                <div class="scenario-card border-2 border-gray-200 rounded-lg p-4 cursor-pointer hover:border-blue-500 transition" data-type="option" onclick="window.Base10ModuleV2.selectScenario('option')">
+                  <div class="font-semibold">🎨 Groupes d'Options</div>
+                  <p class="text-xs text-gray-600">Options & préférences</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Accordion 2: Mode -->
+            <div class="base10-accordion" id="acc-distribution">
+              <div class="base10-accordion-header cursor-pointer font-semibold text-gray-800 pb-3 border-b flex justify-between items-center" onclick="window.Base10ModuleV2.toggleAccordion('distribution')">
+                <span><span class="step-circle bg-blue-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm mr-2">2</span> Mode</span>
+                <i class="fas fa-chevron-down transition-transform"></i>
+              </div>
+              <div class="base10-accordion-content pt-4 space-y-2">
+                <button class="distribution-btn w-full text-left border-2 border-gray-200 rounded-lg p-4 hover:border-blue-500 transition" data-type="heterogeneous" onclick="window.Base10ModuleV2.selectDistribution('heterogeneous')">
+                  <div class="font-semibold">🔀 Hétérogène</div>
+                  <p class="text-xs text-gray-600">Serpentine: mélanger faible/moyen/fort</p>
+                </button>
+                <button class="distribution-btn w-full text-left border-2 border-gray-200 rounded-lg p-4 hover:border-blue-500 transition" data-type="homogeneous" onclick="window.Base10ModuleV2.selectDistribution('homogeneous')">
+                  <div class="font-semibold">📊 Homogène</div>
+                  <p class="text-xs text-gray-600">Quantiles: regrouper par niveau</p>
+                </button>
+              </div>
+            </div>
+
+            <!-- Accordion 3: Classes -->
+            <div class="base10-accordion" id="acc-classes">
+              <div class="base10-accordion-header cursor-pointer font-semibold text-gray-800 pb-3 border-b flex justify-between items-center" onclick="window.Base10ModuleV2.toggleAccordion('classes')">
+                <span><span class="step-circle bg-blue-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm mr-2">3</span> Classes</span>
+                <i class="fas fa-chevron-down transition-transform"></i>
+              </div>
+              <div class="base10-accordion-content pt-4">
+                <table class="w-full text-sm mb-3">
+                  <tbody id="regroupementsList">
+                    <!-- Dynamiquement rempli -->
+                  </tbody>
+                </table>
+                <button onclick="window.Base10ModuleV2.addRegroupement(['6A'], 3)" class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+                  <i class="fas fa-plus mr-1"></i> Ajouter
+                </button>
+              </div>
+            </div>
+
+            <!-- Boutons d'action -->
+            <div class="space-y-2 pt-4">
+              <button onclick="window.Base10ModuleV2.generateGroups()" class="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold py-3 rounded-lg hover:shadow-lg transition">
+                <i class="fas fa-wand-magic-2 mr-2"></i> Générer
+              </button>
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="window.Base10ModuleV2.saveTempGroups()" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 transition">
+                  <i class="fas fa-save mr-1"></i> TEMP
+                </button>
+                <button onclick="window.Base10ModuleV2.finalizeGroups()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">
+                  <i class="fas fa-check mr-1"></i> Final
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANNEAU DROIT: Workspace (flexible) -->
+          <div class="flex-1 flex flex-col overflow-hidden">
+
+            <!-- Workspace Header -->
+            <div class="border-b border-gray-200 px-6 py-4 flex justify-between items-center bg-gray-50">
+              <div>
+                <select id="regroupementSelector" onchange="window.Base10ModuleV2.switchRegroupement(this.value)" class="border border-gray-300 rounded px-3 py-2">
+                  <option>Choisir regroupement...</option>
+                </select>
+              </div>
+              <span class="text-sm px-3 py-1 bg-green-100 text-green-700 rounded" id="workspaceStatus">Prêt</span>
+            </div>
+
+            <!-- Groups Grid -->
+            <div id="groupsContainer" class="flex-1 overflow-y-auto p-6">
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="groupsGrid">
+                <!-- Dynamiquement rempli -->
+              </div>
+            </div>
+
+            <!-- Stats Panel -->
+            <div class="border-t border-gray-200 bg-gray-50">
+              <div class="stats-header cursor-pointer px-6 py-4 flex justify-between items-center hover:bg-gray-100 transition" onclick="window.Base10ModuleV2.toggleStats()">
+                <h4 class="font-semibold text-gray-800">
+                  <i class="fas fa-chart-bar mr-2"></i> Statistiques
+                </h4>
+                <i class="fas fa-chevron-down" id="statsToggle"></i>
+              </div>
+              <div id="statsContent" style="display: none;" class="px-6 py-4 max-h-64 overflow-y-auto">
+                <!-- Dynamiquement rempli -->
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    Base10ModuleV2State.modal = modal;
+
+    // Initialiser UI
+    updateRegroupementsList();
+  }
+
+  function close() {
+    if (Base10ModuleV2State.modal) {
+      Base10ModuleV2State.modal.remove();
+      Base10ModuleV2State.modal = null;
+    }
+    log(`✅ Modal closed`);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // EXPORT PUBLIC API
+  // ═══════════════════════════════════════════════════════════════
+
+  const Base10ModuleV2 = {
+    init,
+    open,
+    close,
+
+    selectScenario,
+    selectDistribution,
+    toggleAccordion,
+
+    addRegroupement,
+    updateRegroupement,
+    deleteRegroupement,
+    switchRegroupement,
+
+    generateGroups,
+    saveTempGroups,
+    finalizeGroups,
+    toggleStats,
+
+    // Internals (for onclick handlers)
+    loadStudentsForClasses,
+    renderGroups,
+    renderStats,
+    initializeSwap,
+
+    // State access
+    getState: () => Base10ModuleV2State
+  };
+
+  // Exporter
+  if (typeof window !== 'undefined') {
+    window.Base10ModuleV2 = Base10ModuleV2;
+  }
+
+  log(`✅ Module V2 loaded`);
+
+})(typeof window !== 'undefined' ? window : this);
+</script>

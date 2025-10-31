@@ -7190,14 +7190,11 @@ function addGroupsButton() {
         <span>Afficher le bouton Groupes dans le header</span>
       </label>
     </div>
-    <button onclick="openGroupsInterface()" class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2">
-      <i class="fas fa-plus-circle text-green-600"></i> Créer des groupes
+    <button onclick="openGroupsModuleV4Creator()" class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2">
+      <i class="fas fa-plus-circle text-green-600"></i> Créer des groupes (V4)
     </button>
-    <button onclick="openGroupsInterface('manager')" class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2">
-      <i class="fas fa-cog text-blue-600"></i> Gérer les groupes
-    </button>
-    <button onclick="openGroupsInterface('templates')" class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2">
-      <i class="fas fa-layer-group text-purple-600"></i> Modèles de groupes
+    <button onclick="openGroupsModuleV4Manager()" class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2">
+      <i class="fas fa-cog text-blue-600"></i> Gérer les groupes (V4)
     </button>
     <hr class="my-2 border-gray-200">
     <button onclick="exportGroupsData()" class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2">
@@ -7301,11 +7298,68 @@ function notifyGroupsChanged() {
 
 // ========== CODE À AJOUTER/MODIFIER DANS INTERFACEV2.HTML ==========
 
-// 1. Fonction unifiée openGroupsInterface - utilise le nouveau GroupsModuleComplete (modal intégrée)
-function openGroupsInterface(tab = 'creator') {
-  console.log('🚀 Ouverture de l\'interface des groupes via GroupsModuleComplete...');
+// ═══════════════════════════════════════════════════════════════
+// FONCTIONS DE GESTION DE LA MODALE MODULEGROUPV4
+// ═══════════════════════════════════════════════════════════════
 
-  // Vérifier si GroupsModuleComplete est disponible (groupsModuleComplete.html)
+function openModuleGroupV4Modal(mode = 'creator') {
+  console.log('🚀 Ouverture de ModuleGroupV4 en mode:', mode);
+
+  const modal = document.getElementById('moduleGroupV4Modal');
+  if (!modal) {
+    console.error('❌ Modal moduleGroupV4Modal introuvable');
+    return;
+  }
+
+  // Afficher la modale
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+
+  // Initialiser ModuleGroupV4 s'il n'est pas encore initialisé
+  if (typeof window.ModuleGroupV4 !== 'undefined' && typeof window.ModuleGroupV4.open === 'function') {
+    try {
+      window.ModuleGroupV4.open(mode);
+      console.log('✅ ModuleGroupV4 ouvert avec succès');
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'ouverture de ModuleGroupV4:', error);
+    }
+  } else {
+    console.warn('⚠️ ModuleGroupV4 non disponible');
+  }
+}
+
+function closeModuleGroupV4Modal() {
+  console.log('🔒 Fermeture de ModuleGroupV4Modal');
+  const modal = document.getElementById('moduleGroupV4Modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 1. Fonction unifiée openGroupsInterface - utilise ModuleGroupV4
+// ═══════════════════════════════════════════════════════════════
+
+function openGroupsInterface(tab = 'creator') {
+  console.log('🚀 Ouverture de l\'interface des groupes via ModuleGroupV4...');
+
+  // Mode = 'creator' ou 'manager'
+  const mode = tab === 'creator' ? 'creator' : 'manager';
+
+  // Utiliser ModuleGroupV4 en priorité
+  if (typeof window !== 'undefined' && window.ModuleGroupV4 && typeof window.ModuleGroupV4.open === 'function') {
+    try {
+      openModuleGroupV4Modal(mode);
+      console.log('✅ ModuleGroupV4 ouvert avec succès');
+      return;
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'ouverture de ModuleGroupV4:', error);
+    }
+  }
+
+  // FALLBACK : Si ModuleGroupV4 n'est pas disponible, essayer GroupsModuleComplete
+  console.warn('⚠️ ModuleGroupV4 non disponible, fallback vers GroupsModuleComplete...');
   if (typeof window !== 'undefined' && window.GroupsModuleComplete && typeof window.GroupsModuleComplete.open === 'function') {
     try {
       window.GroupsModuleComplete.open();
@@ -7356,6 +7410,20 @@ function openGroupsInterface(tab = 'creator') {
       alert('Impossible de charger l\'interface des groupes: ' + error.message);
     })
     .getGroupsInterface();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FONCTIONS WRAPPER POUR MODULEGROUPV4
+// ═══════════════════════════════════════════════════════════════
+
+function openGroupsModuleV4Creator() {
+  console.log('🚀 Ouverture de ModuleGroupV4 en mode création');
+  openGroupsInterface('creator');
+}
+
+function openGroupsModuleV4Manager() {
+  console.log('🚀 Ouverture de ModuleGroupV4 en mode gestion');
+  openGroupsInterface('manager');
 }
 
 // 2. Fonction pour notifier les changements de groupes
