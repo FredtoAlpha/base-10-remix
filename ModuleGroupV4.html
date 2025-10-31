@@ -1,0 +1,528 @@
+<script>
+(function(global) {
+  'use strict';
+
+  const windowRef = typeof window !== 'undefined' ? window : globalThis;
+  const documentRef = windowRef?.document;
+
+  if (!windowRef || !documentRef) {
+    console.error('❌ ModuleGroupV4: environnement navigateur non détecté');
+    return;
+  }
+
+  console.log('🚀 ModuleGroupV4 - Nouveau Système Multi-Passes');
+
+  // ═══════════════════════════════════════════════════════════════
+  //  CONSTANTES
+  // ═══════════════════════════════════════════════════════════════
+
+  const GROUP_TYPES = {
+    needs: { id: 'needs', title: 'Groupes de Besoins', icon: '📊', color: 'from-blue-600 to-indigo-600' },
+    language: { id: 'language', title: 'Groupes LV2', icon: '🗣️', color: 'from-purple-600 to-pink-600' },
+    option: { id: 'option', title: 'Groupes d\'Options', icon: '🎨', color: 'from-emerald-600 to-teal-600' }
+  };
+
+  const DISTRIBUTION_TYPES = {
+    heterogeneous: { id: 'heterogeneous', label: 'Hétérogène' },
+    homogeneous: { id: 'homogeneous', label: 'Homogène' }
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  //  ÉTAT GLOBAL
+  // ═══════════════════════════════════════════════════════════════
+
+  const state = {
+    currentStep: 1,
+    totalSteps: 4,
+    mode: 'creator',
+    groupType: null,
+    distributionMode: 'heterogeneous',
+    regroupements: [],
+    activeRegroupementId: null,
+    pendingClasses: [],
+    classesData: {},
+    classKeyMap: {},
+    students: [],
+    studentsById: new Map(),
+    groupsByRegroupement: {},
+    swapHistory: [],
+    swapHistoryIndex: -1,
+    isLoading: false,
+    modal: null
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  //  UTILITAIRES
+  // ═══════════════════════════════════════════════════════════════
+
+  function qs(selector, scope = documentRef) {
+    return scope?.querySelector(selector);
+  }
+
+  function qsa(selector, scope = documentRef) {
+    return Array.from(scope?.querySelectorAll(selector) || []);
+  }
+
+  function escapeHtml(value) {
+    if (typeof value !== 'string') return '';
+    return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function showToast(message, type = 'info', duration = 3500) {
+    const toast = documentRef.createElement('div');
+    const colors = { error: '#ef4444', success: '#22c55e', warning: '#f59e0b', info: '#6366f1' };
+    toast.className = 'fixed top-6 right-6 z-50 px-6 py-4 rounded-lg text-white font-semibold shadow-lg';
+    toast.style.backgroundColor = colors[type] || colors.info;
+    toast.textContent = message;
+    documentRef.body.appendChild(toast);
+    setTimeout(() => toast.remove(), duration);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  GESTION REGROUPEMENTS
+  // ═══════════════════════════════════════════════════════════════
+
+  function getActiveRegroupement() {
+    return state.regroupements.find(r => r.id === state.activeRegroupementId) || null;
+  }
+
+  function createRegroupement(classes, label, groupCount) {
+    if (!classes || classes.length === 0) return;
+    const reg = {
+      id: `reg-${Date.now()}`,
+      label: label || `Regroupement ${state.regroupements.length + 1}`,
+      classes,
+      groupCount: groupCount || 3
+    };
+    state.regroupements.push(reg);
+    state.activeRegroupementId = reg.id;
+    showToast(`✅ Regroupement créé`, 'success');
+  }
+
+  function deleteRegroupement(regroupementId) {
+    state.regroupements = state.regroupements.filter(r => r.id !== regroupementId);
+    delete state.groupsByRegroupement[regroupementId];
+    if (state.activeRegroupementId === regroupementId) {
+      state.activeRegroupementId = state.regroupements[0]?.id || null;
+    }
+  }
+
+  function activateRegroupement(regroupementId) {
+    state.activeRegroupementId = regroupementId;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  RENDU PRINCIPAL
+  // ═══════════════════════════════════════════════════════════════
+
+  function render() {
+    let content = '';
+
+    switch (state.currentStep) {
+      case 1:
+        content = renderStep1();
+        break;
+      case 2:
+        content = renderStep2();
+        break;
+      case 4:
+        content = renderStep4();
+        break;
+      default:
+        content = '<p>Étape inconnue</p>';
+    }
+
+    return `
+      <div class="w-full h-full bg-gray-50 p-8 overflow-auto">
+        <div class="max-w-7xl mx-auto">
+          ${content}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStep1() {
+    return `
+      <div class="space-y-6">
+        <h2 class="text-3xl font-bold text-center mb-8">Sélectionnez un Scénario</h2>
+        <div class="grid grid-cols-3 gap-6">
+          ${Object.values(GROUP_TYPES).map(type => `
+            <div class="p-6 bg-white rounded-lg border-2 border-gray-200 cursor-pointer hover:border-indigo-500 hover:shadow-lg transition-all"
+                 onclick="window.ModuleGroupV4.selectScenario('${type.id}')">
+              <div class="text-5xl mb-4">${type.icon}</div>
+              <h3 class="text-xl font-bold">${type.title}</h3>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderStep2() {
+    return `
+      <div class="space-y-6">
+        <h2 class="text-3xl font-bold text-center mb-8">Configuration</h2>
+        
+        <div class="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 class="text-xl font-bold mb-4">Mode de Répartition</h3>
+          <div class="space-y-3">
+            <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-blue-50">
+              <input type="radio" name="dist" value="heterogeneous" 
+                     ${state.distributionMode === 'heterogeneous' ? 'checked' : ''}
+                     onchange="window.ModuleGroupV4.setDistributionMode('heterogeneous')">
+              <span class="ml-3"><strong>Hétérogène</strong> - Tous niveaux mélangés</span>
+            </label>
+            <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-purple-50">
+              <input type="radio" name="dist" value="homogeneous"
+                     ${state.distributionMode === 'homogeneous' ? 'checked' : ''}
+                     onchange="window.ModuleGroupV4.setDistributionMode('homogeneous')">
+              <span class="ml-3"><strong>Homogène</strong> - Regrouper par niveau</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg border border-gray-200">
+          <h3 class="text-xl font-bold mb-4">Associations Classes</h3>
+          ${renderAssociations()}
+          <button onclick="window.ModuleGroupV4.showAddAssociationModal()" class="w-full mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700">
+            + Ajouter Association
+          </button>
+        </div>
+
+        <div class="flex gap-4">
+          <button onclick="window.ModuleGroupV4.goToStep(1)" class="flex-1 px-4 py-2 bg-gray-300 rounded-lg font-semibold">← Retour</button>
+          <button onclick="window.ModuleGroupV4.generateGroups()" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700" ${state.regroupements.length === 0 ? 'disabled' : ''}>
+            Générer →
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAssociations() {
+    if (state.regroupements.length === 0) {
+      return '<p class="text-gray-500 text-center py-4">Aucune association créée</p>';
+    }
+    return `
+      <div class="space-y-2">
+        ${state.regroupements.map(reg => `
+          <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+            <div>
+              <p class="font-semibold">${escapeHtml(reg.label)}</p>
+              <p class="text-sm text-gray-600">${reg.classes.join(' + ')} → ${reg.groupCount} groupe(s)</p>
+            </div>
+            <button onclick="window.ModuleGroupV4.deleteRegroupement('${reg.id}')" class="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600">
+              Supprimer
+            </button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function renderStep4() {
+    const reg = getActiveRegroupement();
+    const groupsData = state.groupsByRegroupement[reg?.id];
+    const groups = groupsData?.groups || [];
+
+    if (groups.length === 0) {
+      return '<p class="text-center">Aucun groupe généré</p>';
+    }
+
+    return `
+      <div class="flex flex-col h-screen">
+        <div class="flex gap-2 mb-4 pb-4 border-b">
+          ${state.regroupements.map(r => `
+            <button class="px-4 py-2 rounded-lg font-semibold ${state.activeRegroupementId === r.id ? 'bg-indigo-600 text-white' : 'bg-gray-200'}"
+                    onclick="window.ModuleGroupV4.activateRegroupement('${r.id}')">
+              ${escapeHtml(r.label)}
+            </button>
+          `).join('')}
+        </div>
+
+        <div class="flex-grow overflow-auto">
+          <div class="grid gap-4" style="grid-template-columns: repeat(${Math.min(groups.length, 5)}, 1fr);">
+            ${groups.map(g => `
+              <div class="border-2 border-gray-200 rounded-lg p-4 bg-white">
+                <h4 class="font-bold">Groupe ${g.number || 1}</h4>
+                <p class="text-sm text-gray-600">${g.students?.length || 0} élèves</p>
+                <div class="mt-3 space-y-1 text-sm max-h-96 overflow-y-auto">
+                  ${(g.students || []).map(s => `
+                    <div class="p-2 bg-blue-50 rounded text-xs">
+                      ${escapeHtml(s.nom)} ${escapeHtml(s.prenom)}
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="sticky bottom-0 bg-white border-t p-4 flex gap-2 flex-wrap">
+          <button onclick="window.ModuleGroupV4.saveTempGroups()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700">
+            💾 Sauvegarder TEMP
+          </button>
+          <button onclick="window.ModuleGroupV4.finalizeGroups()" class="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700">
+            ✅ Finaliser
+          </button>
+          <button onclick="window.ModuleGroupV4.goToStep(2)" class="ml-auto px-4 py-2 bg-gray-300 rounded-lg font-semibold">← Retour</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  API PUBLIQUE
+  // ═══════════════════════════════════════════════════════════════
+
+  global.ModuleGroupV4 = {
+    init: function() {
+      console.log('✅ ModuleGroupV4 initialisé');
+    },
+
+    open: function(mode = 'creator') {
+      state.mode = mode;
+      state.currentStep = 1;
+      this.updateUI();
+      console.log(`✅ ModuleGroupV4 ouvert en mode: ${mode}`);
+    },
+
+    setState: function(newState) {
+      Object.assign(state, newState);
+    },
+
+    getState: function() {
+      return state;
+    },
+
+    selectScenario: function(scenarioId) {
+      state.groupType = scenarioId;
+      state.currentStep = 2;
+      this.updateUI();
+      showToast(`✅ Scénario sélectionné`, 'success');
+    },
+
+    setDistributionMode: function(mode) {
+      state.distributionMode = mode;
+      this.updateUI();
+    },
+
+    showAddAssociationModal: function() {
+      const availableClasses = Object.keys(state.classKeyMap || {});
+      if (availableClasses.length === 0) {
+        showToast('Aucune classe disponible', 'warning');
+        return;
+      }
+
+      let html = `
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div class="bg-white rounded-lg p-8 max-w-md w-full">
+            <h3 class="text-2xl font-bold mb-6">Nouvelle Association</h3>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-2">Classes</label>
+              <div class="space-y-2 max-h-40 overflow-y-auto">
+                ${availableClasses.map(cls => `
+                  <label class="flex items-center">
+                    <input type="checkbox" value="${cls}" class="class-select">
+                    <span class="ml-2">${escapeHtml(cls)}</span>
+                  </label>
+                `).join('')}
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-semibold mb-2">Nombre de groupes</label>
+              <input type="number" id="groupCount" min="1" max="10" value="3" class="w-full border rounded-lg p-2">
+            </div>
+            <div class="mb-6">
+              <label class="block text-sm font-semibold mb-2">Nom</label>
+              <input type="text" id="regLabel" placeholder="Passe 1" class="w-full border rounded-lg p-2">
+            </div>
+            <div class="flex gap-4">
+              <button onclick="window.ModuleGroupV4.closeModal()" class="flex-1 px-4 py-2 bg-gray-300 rounded-lg">Annuler</button>
+              <button onclick="window.ModuleGroupV4.addAssociationFromModal()" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg">Ajouter</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      state.modal = documentRef.createElement('div');
+      state.modal.innerHTML = html;
+      documentRef.body.appendChild(state.modal);
+    },
+
+    addAssociationFromModal: function() {
+      const classes = Array.from(qsa('.class-select:checked')).map(el => el.value);
+      const groupCount = parseInt(qs('#groupCount')?.value || 3);
+      const label = qs('#regLabel')?.value || `Regroupement ${state.regroupements.length + 1}`;
+
+      if (classes.length === 0) {
+        showToast('Sélectionnez au moins une classe', 'warning');
+        return;
+      }
+
+      createRegroupement(classes, label, groupCount);
+      this.closeModal();
+      this.updateUI();
+    },
+
+    closeModal: function() {
+      if (state.modal) {
+        state.modal.remove();
+        state.modal = null;
+      }
+    },
+
+    deleteRegroupement: function(regroupementId) {
+      deleteRegroupement(regroupementId);
+      this.updateUI();
+    },
+
+    activateRegroupement: function(regroupementId) {
+      activateRegroupement(regroupementId);
+      this.updateUI();
+    },
+
+    goToStep: function(step) {
+      state.currentStep = step;
+      this.updateUI();
+    },
+
+    generateGroups: async function() {
+      const reg = getActiveRegroupement();
+      if (!reg) {
+        showToast('Pas de regroupement actif', 'error');
+        return;
+      }
+
+      state.isLoading = true;
+      showToast('Génération en cours...', 'info');
+
+      try {
+        const payload = {
+          classes: reg.classes,
+          groupCount: reg.groupCount,
+          distributionMode: state.distributionMode,
+          groupType: state.groupType,
+          regroupementId: reg.id,
+          action: 'generateGroups'
+        };
+
+        const response = await google.script.run
+          .withSuccessHandler((r) => this.onGroupsGenerated(r))
+          .withFailureHandler((e) => showToast('Erreur: ' + e, 'error'))(
+            'handleGroupsModuleRequest',
+            payload
+          );
+      } finally {
+        state.isLoading = false;
+      }
+    },
+
+    onGroupsGenerated: function(response) {
+      if (!response || !response.success) {
+        showToast('Erreur génération', 'error');
+        return;
+      }
+
+      const reg = getActiveRegroupement();
+      state.groupsByRegroupement[reg.id] = {
+        groups: response.groups || [],
+        timestamp: new Date().toISOString()
+      };
+
+      state.currentStep = 4;
+      this.updateUI();
+      showToast(`✅ ${response.groups?.length || 0} groupes générés`, 'success');
+    },
+
+    saveTempGroups: async function() {
+      const reg = getActiveRegroupement();
+      const groupsData = state.groupsByRegroupement[reg?.id];
+
+      if (!groupsData) {
+        showToast('Aucun groupe à sauvegarder', 'warning');
+        return;
+      }
+
+      showToast('Sauvegarde en cours...', 'info');
+
+      try {
+        const payload = {
+          type: state.groupType,
+          regroupementId: reg.id,
+          groups: groupsData.groups,
+          offsetStart: 1,
+          persistMode: 'replace',
+          action: 'saveTempGroups'
+        };
+
+        const response = await google.script.run
+          .withSuccessHandler((r) => {
+            if (r.success) {
+              showToast('✅ Groupes sauvegardés en TEMP', 'success');
+            } else {
+              showToast('Erreur: ' + r.error, 'error');
+            }
+          })
+          .withFailureHandler((e) => showToast('Erreur: ' + e, 'error'))(
+            'handleGroupsModuleRequest',
+            payload
+          );
+      } catch (error) {
+        showToast('Erreur: ' + error.message, 'error');
+      }
+    },
+
+    finalizeGroups: async function() {
+      const reg = getActiveRegroupement();
+
+      if (!reg) {
+        showToast('Pas de regroupement actif', 'error');
+        return;
+      }
+
+      showToast('Finalization en cours...', 'info');
+
+      try {
+        const payload = {
+          type: state.groupType,
+          regroupementId: reg.id,
+          action: 'finalizeTempGroups'
+        };
+
+        const response = await google.script.run
+          .withSuccessHandler((r) => {
+            if (r.success) {
+              showToast('✅ Groupes finalisés', 'success');
+            } else {
+              showToast('Erreur: ' + r.error, 'error');
+            }
+          })
+          .withFailureHandler((e) => showToast('Erreur: ' + e, 'error'))(
+            'handleGroupsModuleRequest',
+            payload
+          );
+      } catch (error) {
+        showToast('Erreur: ' + error.message, 'error');
+      }
+    },
+
+    updateUI: function() {
+      const container = qs('.groups-module-container');
+      if (container) {
+        container.innerHTML = render();
+      }
+    }
+  };
+
+  // Initialiser au chargement
+  if (documentRef.readyState === 'loading') {
+    documentRef.addEventListener('DOMContentLoaded', () => {
+      global.ModuleGroupV4.init();
+    });
+  } else {
+    global.ModuleGroupV4.init();
+  }
+
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>

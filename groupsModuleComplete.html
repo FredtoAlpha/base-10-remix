@@ -1,29 +1,24 @@
+<!-- 
+  ═══════════════════════════════════════════════════════════════════════════════
+    ❌ ANCIEN MODULE - ARCHIVÉ ET DÉSACTIVÉ
+    
+    Ce fichier a été remplacé par ModuleGroupV4.html
+    
+    ❌ NE PAS UTILISER - OBSOLÈTE
+    ✅ UTILISER: ModuleGroupV4.html + groupsAlgorithmV4.js + groupsSwapV4.js
+    
+    Date d'archivage: 31 octobre 2025
+    Raison: Remplacement par nouveau système multi-passes
+  ═══════════════════════════════════════════════════════════════════════════════
+-->
+
 <script>
-(function(global) {
-  'use strict';
+console.error('❌ ERREUR: groupsModuleComplete est ARCHIVÉ et ne doit plus être utilisé!');
+console.error('✅ Utilisez ModuleGroupV4.html à la place');
+// Ne rien charger - fichier vide intentionnellement
+</script>
 
-  /*
-  ════════════════════════════════════════════════════════════════════════
-    MODULE COMPLET DE GESTION DES GROUPES
-    - Groupes de Besoins (scores Math/Français)
-    - Groupes LV2 (ESP/ITA/autres langues)
-    - Groupes Options (future extension)
-    - Drag & Drop entre groupes
-    - Export GROUPES / PDF / CSV
-  ════════════════════════════════════════════════════════════════════════
-  */
-
-  // VERSION 4.0 - Octobre 2025 - GROUPS MODULE (NE PAS SUPPRIMER)
-
-  const windowRef =
-    typeof window !== 'undefined'
-      ? window
-      : (typeof globalThis !== 'undefined' ? globalThis : undefined);
-  const documentRef = windowRef?.document;
-
-  if (!windowRef || !documentRef) {
-    console.log('❌ GroupsModuleComplete: environnement navigateur non détecté');
-    return;
+  // Fichier vide - ancien module archivé
   }
 
   console.log('🚀 Chargement du Module Complet de Gestion des Groupes...');
@@ -1583,9 +1578,6 @@
             </div>
           </div>
         ` : ''}
-            </div>
-          </div>
-        `}
 
         ${recommendation ? `
           <!-- RECOMMANDATION ALGO -->
@@ -4920,6 +4912,23 @@
 
     init() {
       console.log('✅ GroupsModuleComplete BASE 10 Scientific initialisé');
+    },
+
+    setState(config) {
+      if (config && typeof config === 'object') {
+        if (config.mode) {
+          state.mode = config.mode;
+          console.log(`✅ Mode défini à: ${config.mode}`);
+        }
+        if (config.groupType) {
+          state.groupType = config.groupType;
+          console.log(`✅ Type de groupe défini à: ${config.groupType}`);
+        }
+        if (config.numGroups !== undefined) {
+          state.numGroups = config.numGroups;
+          console.log(`✅ Nombre de groupes défini à: ${config.numGroups}`);
+        }
+      }
     },
 
     open() {

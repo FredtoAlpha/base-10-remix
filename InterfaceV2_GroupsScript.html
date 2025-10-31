@@ -66,7 +66,9 @@ window.getINTClasses = function() {
 };
 
 // 2. PATCH: Menu amélioré pour les groupes avec gestion des scores
+// ❌ DÉSACTIVÉ - Utiliser le menu Admin à la place
 function createEnhancedGroupsMenu() {
+  console.log('⚠️ createEnhancedGroupsMenu désactivé - utiliser le menu Admin');
   return;
   console.log('🔧 Création du menu GROUPES amélioré...');
   const nav = document.querySelector('.app-header nav');
@@ -106,10 +108,10 @@ function createEnhancedGroupsMenu() {
       <!-- Section Création -->
       <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Création</div>
       
-      <button onclick="openGroupsInterface('creator')" class="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-3 transition-colors">
+      <button onclick="openGroupsModuleV4Creator()" class="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-3 transition-colors">
         <i class="fas fa-plus-circle text-green-600"></i>
         <div>
-          <div class="font-medium">Créer des groupes</div>
+          <div class="font-medium">Créer des groupes (V4)</div>
           <div class="text-xs text-gray-500">Langues ou besoins</div>
         </div>
       </button>
@@ -147,19 +149,11 @@ function createEnhancedGroupsMenu() {
       <div class="border-t border-gray-100 mt-2 pt-2">
         <div class="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Gestion</div>
         
-        <button onclick="openGroupsInterface('manager')" class="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-3 transition-colors">
+        <button onclick="openGroupsModuleV4Manager()" class="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-3 transition-colors">
           <i class="fas fa-cog text-blue-600"></i>
           <div>
-            <div class="font-medium">Gérer les groupes</div>
+            <div class="font-medium">Gérer les groupes (V4)</div>
             <div class="text-xs text-gray-500">Modifier ou supprimer</div>
-          </div>
-        </button>
-        
-        <button onclick="openGroupsInterface('templates')" class="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-center gap-3 transition-colors">
-          <i class="fas fa-layer-group text-purple-600"></i>
-          <div>
-            <div class="font-medium">Modèles de groupes</div>
-            <div class="text-xs text-gray-500">Configurations prédéfinies</div>
           </div>
         </button>
       </div>
