@@ -53,13 +53,13 @@
     },
     option: {
       id: 'option',
-      title: 'Groupes Options',
-      description: 'Groupes basés sur les options choisies (à venir)',
+      title: 'Groupes d\'Options',
+      description: 'Groupes basés sur les options choisies (Art, Musique, Théâtre, Sport...)',
       icon: '🎨',
       color: 'from-emerald-600 to-teal-600',
       bgColor: 'bg-emerald-50',
       borderColor: 'border-emerald-200',
-      disabled: true
+      disabled: false
     }
   };
 
@@ -105,6 +105,11 @@
     selectedLanguage: null,            // Sera défini après détection des langues
     availableLanguages: [],             // Langues détectées
     cachedLanguageDetectionKey: null,  // Cache : clé pour éviter recalculs inutiles
+
+    // Config spécifique Options
+    selectedOption: null,               // Option sélectionnée
+    availableOptions: [],               // Options détectées
+    cachedOptionDetectionKey: null,     // Cache : clé pour éviter recalculs inutiles
 
     // Données brutes et mapping
     classesData: {},                    // Dump brut du backend : { "6°1FIN": { eleves:[...] }, ... }
@@ -1147,27 +1152,70 @@
         ...group,
         students: group.students.map(student => ({ ...student }))
       }));
-      // Récupérer les élèves du regroupement sauvegardé
-      const allStudentsInGroups = [];
-      stored.groups.forEach(group => {
-        if (Array.isArray(group.students)) {
-          allStudentsInGroups.push(...group.students);
-        }
-      });
-      state.students = allStudentsInGroups;
-      state.studentsById = new Map(allStudentsInGroups.map(s => [s.id, s]));
     } else {
       state.generatedGroups = [];
-      state.students = [];
-      state.studentsById = new Map();
     }
 
-    // 🟢 FIX #2 : Rafraîchir les langues disponibles après changement de regroupement
-    if (state.groupType === 'language') {
-      detectAvailableLanguages();
+    // 🟢 FIX CRITIQUE : Purge stricte et reload frais des élèves
+    // Évite de réutiliser de "vieux" élèves quand on change de regroupement
+    console.log('[GroupsModule] 🔄 Purge des anciens élèves et reload frais...');
+    state.students = [];
+    state.studentsById = new Map();
+    
+    // Forcer un reload frais depuis les classes actives
+    if (state.selectedClasses.length > 0 && state.classesData && Object.keys(state.classesData).length > 0) {
+      loadStudentsFromClasses()
+        .then(() => {
+          console.log('[GroupsModule] ✅ Reload frais des élèves complété');
+          // Rafraîchir les langues/options disponibles après reload
+          if (state.groupType === 'language') {
+            detectAvailableLanguages();
+          }
+          if (state.groupType === 'option') {
+            detectAvailableOptions();
+          }
+          applyOffsetToGeneratedGroups();
+          updateUI();
+        })
+        .catch(error => {
+          console.error('[GroupsModule] ❌ Erreur reload frais:', error);
+          // En cas d'erreur, utiliser les anciens élèves en fallback
+          const allStudentsInGroups = [];
+          if (stored && Array.isArray(stored.groups)) {
+            stored.groups.forEach(group => {
+              if (Array.isArray(group.students)) {
+                allStudentsInGroups.push(...group.students);
+              }
+            });
+          }
+          state.students = allStudentsInGroups;
+          state.studentsById = new Map(allStudentsInGroups.map(s => [s.id, s]));
+          applyOffsetToGeneratedGroups();
+          updateUI();
+        });
+    } else {
+      // Pas de classes disponibles, continuer avec les anciens élèves
+      const allStudentsInGroups = [];
+      if (stored && Array.isArray(stored.groups)) {
+        stored.groups.forEach(group => {
+          if (Array.isArray(group.students)) {
+            allStudentsInGroups.push(...group.students);
+          }
+        });
+      }
+      state.students = allStudentsInGroups;
+      state.studentsById = new Map(allStudentsInGroups.map(s => [s.id, s]));
+      
+      // 🟢 FIX #2 : Rafraîchir les langues disponibles après changement de regroupement
+      if (state.groupType === 'language') {
+        detectAvailableLanguages();
+      }
+      if (state.groupType === 'option') {
+        detectAvailableOptions();
+      }
+      
+      applyOffsetToGeneratedGroups();
     }
-
-    applyOffsetToGeneratedGroups();
   }
 
   function updateNewRegroupementCount(delta) {
@@ -1231,7 +1279,11 @@
       const existing = Number(group.index);
       const index = Number.isFinite(existing) && existing > 0 ? existing : base + idx;
       group.index = index;
-      group.name = `Groupe ${index}`;
+      
+      // 🟢 FIX: Préserver le nom personnalisé s'il existe, sinon générer
+      if (!group.name || group.name.trim() === '') {
+        group.name = `Groupe ${index}`;
+      }
     });
 
     storeGeneratedGroupsForActiveRegroupement();
@@ -1818,8 +1870,8 @@
         ${state.focusMode ? '' : `<div class="mt-6 bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-start gap-3">
           <i class="fas fa-hand-pointer text-indigo-600 text-xl mt-0.5"></i>
           <div class="text-sm text-indigo-900">
-            <p class="font-semibold mb-1">Glisser-déposer activé :</p>
-            <p>Rééquilibrez vos groupes en déplaçant les élèves. Les statistiques et l'ordre sont mis à jour instantanément.</p>
+            <p class="font-semibold mb-1">🔒 Glisser-déposer activé (contraint au bloc):</p>
+            <p>Rééquilibrez vos groupes en déplaçant les élèves. Les élèves restent dans leur bloc (${getActiveRegroupement()?.label || 'regroupement'}). Les statistiques sont mises à jour instantanément.</p>
           </div>
         </div>`}
       </div>
@@ -3055,6 +3107,12 @@
           console.log(`[GroupsModule] 🗣️ Détection LV2 complétée. Language sélectionné: ${state.selectedLanguage}`);
         }
 
+        // 🟢 FIX CRITIQUE : Détecter les options AVANT de filtrer (même logique que LV2)
+        if (state.groupType === 'option') {
+          detectAvailableOptions();
+          console.log(`[GroupsModule] 🎨 Détection Options complétée. Option sélectionnée: ${state.selectedOption}`);
+        }
+
         // 🔴 FILTRAGE LV2 : Si on est en mode 'language', ne garder que les élèves de la langue sélectionnée
         let filteredStudents = students;
         if (state.groupType === 'language' && state.selectedLanguage) {
@@ -3065,9 +3123,30 @@
           });
           console.log(`[GroupsModule] 🔍 Filtrage LV2 "${state.selectedLanguage}": ${beforeFilter} élèves → ${filteredStudents.length} élèves`);
           
-          if (filteredStudents.length === 0) {
+          // 🟢 FIX: Toast post-filtrage pour confirmation
+          if (filteredStudents.length > 0) {
+            showToast(`🗣️ ${state.selectedLanguage} • ${filteredStudents.length} élève(s) sélectionné(s)`, 'success');
+          } else {
             console.warn(`[GroupsModule] ⚠️ Aucun élève trouvé pour la langue "${state.selectedLanguage}"`);
             showToast(`⚠️ Aucun élève trouvé pour la langue ${state.selectedLanguage}`, 'warning');
+          }
+        }
+
+        // 🔴 FILTRAGE OPTIONS : Si on est en mode 'option', ne garder que les élèves de l'option sélectionnée
+        if (state.groupType === 'option' && state.selectedOption) {
+          const beforeFilter = filteredStudents.length;
+          filteredStudents = filteredStudents.filter(s => {
+            const studentOption = normalizeOptionCode(s.opt || s.OPT || s.option || s.OPTION || '');
+            return studentOption === state.selectedOption;
+          });
+          console.log(`[GroupsModule] 🔍 Filtrage OPTION "${state.selectedOption}": ${beforeFilter} élèves → ${filteredStudents.length} élèves`);
+          
+          // 🟢 FIX: Toast post-filtrage pour confirmation
+          if (filteredStudents.length > 0) {
+            showToast(`🎨 ${state.selectedOption} • ${filteredStudents.length} élève(s) sélectionné(s)`, 'success');
+          } else {
+            console.warn(`[GroupsModule] ⚠️ Aucun élève trouvé pour l'option "${state.selectedOption}"`);
+            showToast(`⚠️ Aucun élève trouvé pour l'option ${state.selectedOption}`, 'warning');
           }
         }
 
@@ -3156,6 +3235,84 @@
     // 🟢 FIX #6 : Logging amélioré - afficher les langues complètement
     const langDisplay = state.availableLanguages.map(l => `${l.lang}(${l.count})`).join(', ');
     console.log(`[GroupsModule] 🗣️ Langues détectées: [${langDisplay}] → Sélection: ${state.selectedLanguage}`);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  DÉTECTION DES OPTIONS (même logique que LV2)
+  // ═══════════════════════════════════════════════════════════════
+
+  function normalizeOptionCode(optionCode) {
+    const normalized = (optionCode || '').toString().trim().toUpperCase();
+    // Mapping des options connues
+    const knownOptions = {
+      'ART': 'ART',
+      'ARTS': 'ART',
+      'MUSIQUE': 'MUSIQUE',
+      'MUS': 'MUSIQUE',
+      'THEATRE': 'THEATRE',
+      'THÉÂTRE': 'THEATRE',
+      'SPORT': 'SPORT',
+      'EPS': 'SPORT',
+      'TECHNO': 'TECHNO',
+      'TECHNOLOGIE': 'TECHNO',
+      'LATIN': 'LATIN',
+      'GREC': 'GREC',
+      'DEUTSCH': 'ALL',
+      'CHINOIS': 'CHINOIS',
+      'ESPAGNOL': 'ESP',
+      'ITALIEN': 'ITA'
+    };
+    return knownOptions[normalized] || normalized || 'AUTRE';
+  }
+
+  function detectAvailableOptions() {
+    if (!state.classesData || Object.keys(state.classesData).length === 0) {
+      state.availableOptions = [];
+      state.selectedOption = null;
+      return;
+    }
+
+    // 🟢 Cache - si les classes sélectionnées n'ont pas changé, réutiliser le cache
+    const currentKey = (state.selectedClasses || []).sort().join('|');
+    if (state.cachedOptionDetectionKey === currentKey && state.availableOptions.length > 0) {
+      console.log('[GroupsModule] 🎨 Options détectées (FROM CACHE):', state.availableOptions, 'Sélection:', state.selectedOption);
+      return;
+    }
+
+    console.log('[GroupsModule] 🎨 NOUVELLE DÉTECTION OPTIONS (classes changées ou première fois)');
+
+    const optionCounts = {};
+
+    // Parcourir tous les élèves des classes sélectionnées
+    (state.selectedClasses || []).forEach(displayName => {
+      const bucket = state.classesData[displayName];
+      if (!bucket || !Array.isArray(bucket.eleves)) return;
+
+      bucket.eleves.forEach(e => {
+        if (!e) return;
+        const option = normalizeOptionCode(e.opt || e.OPT || e.option || e.OPTION || '');
+        if (option && option !== 'AUTRE') {
+          optionCounts[option] = (optionCounts[option] || 0) + 1;
+        }
+      });
+    });
+
+    state.availableOptions = Object.entries(optionCounts)
+      .map(([opt, count]) => ({ opt, count }))
+      .sort((a, b) => b.count - a.count); // Tri par nombre d'élèves décroissant
+
+    // Auto-correction de l'option sélectionnée
+    const currentOptAvailable = state.availableOptions.some(o => o.opt === state.selectedOption);
+    if (!currentOptAvailable && state.availableOptions.length > 0) {
+      state.selectedOption = state.availableOptions[0].opt;
+      showToast(`Option sélectionnée: ${state.selectedOption}`, 'info', 1500);
+    }
+
+    // Sauvegarder la clé de cache
+    state.cachedOptionDetectionKey = currentKey;
+
+    const optDisplay = state.availableOptions.map(o => `${o.opt}(${o.count})`).join(', ');
+    console.log(`[GroupsModule] 🎨 Options détectées: [${optDisplay}] → Sélection: ${state.selectedOption}`);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -3361,12 +3518,19 @@
         dragClass: 'sortable-drag',
 
         onEnd: function(evt) {
-          const fromGroupId = parseInt(evt.from.dataset.groupId);
-          const toGroupId = parseInt(evt.to.dataset.groupId);
+          const fromGroupIndex = parseInt(evt.from.dataset.groupId);
+          const toGroupIndex = parseInt(evt.to.dataset.groupId);
           const studentId = evt.item.dataset.studentId;
 
-          if (fromGroupId !== toGroupId) {
-            moveStudent(studentId, fromGroupId, toGroupId);
+          if (fromGroupIndex !== toGroupIndex) {
+            // 🔒 CONTRÔLE DE BLOC : vérifier que le swap reste dans le même regroupement
+            const activeRegroupement = getActiveRegroupement();
+            if (!activeRegroupement || !state.generatedGroups || state.generatedGroups.length === 0) {
+              showToast('❌ Erreur : regroupement non valide - swap impossible', 'error', 2000);
+              return;
+            }
+
+            moveStudent(studentId, fromGroupIndex, toGroupIndex);
           }
         }
       });
